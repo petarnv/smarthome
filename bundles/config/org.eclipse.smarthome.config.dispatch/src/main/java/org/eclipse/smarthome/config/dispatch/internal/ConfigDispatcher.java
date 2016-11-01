@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-2016 by the respective copyright holders.
+ * Copyright (c) 2014-2015 openHAB UG (haftungsbeschraenkt) and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -20,8 +20,12 @@ import java.nio.file.WatchEvent;
 import java.nio.file.WatchEvent.Kind;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Dictionary;
+import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -39,39 +43,47 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * This class provides a mean to read any kind of configuration data from
- * config folder files and dispatch it to the different bundles using the {@link ConfigurationAdmin} service.
+ * This class provides a mean to read any kind of configuration data from config
+ * folder files and dispatch it to the different bundles using the
+ * {@link ConfigurationAdmin} service.
  *
  * <p>
- * The name of the configuration folder can be provided as a program argument "smarthome.configdir" (default is "conf").
- * Configurations for OSGi services are kept in a subfolder that can be provided as a program argument
- * "smarthome.servicedir" (default is "services"). Any file in this folder with the extension .cfg will be processed.
+ * The name of the configuration folder can be provided as a program argument
+ * "smarthome.configdir" (default is "conf"). Configurations for OSGi services
+ * are kept in a subfolder that can be provided as a program argument
+ * "smarthome.servicedir" (default is "services"). Any file in this folder with
+ * the extension .cfg will be processed.
  * </p>
  *
  * <p>
- * The format of the configuration file is similar to a standard property file, with the exception that the property
- * name can be prefixed by the service pid of the {@link ManagedService}:
+ * The format of the configuration file is similar to a standard property file,
+ * with the exception that the property name can be prefixed by the service pid
+ * of the {@link ManagedService}:
  * </p>
  * <p>
  * &lt;service-pid&gt;:&lt;property&gt;=&lt;value&gt;
  * </p>
  * <p>
- * In case the pid does not contain any ".", the default service pid namespace is prefixed, which can be defined by the
- * program argument "smarthome.servicepid" (default is "org.eclipse.smarthome").
+ * In case the pid does not contain any ".", the default service pid namespace
+ * is prefixed, which can be defined by the program argument
+ * "smarthome.servicepid" (default is "org.eclipse.smarthome").
  * </p>
  * <p>
- * If no pid is defined in the property line, the default pid namespace will be used together with the filename. E.g. if
- * you have a file "security.cfg", the pid that will be used is "org.eclipse.smarthome.security".
+ * If no pid is defined in the property line, the default pid namespace will be
+ * used together with the filename. E.g. if you have a file "security.cfg", the
+ * pid that will be used is "org.eclipse.smarthome.security".
  * </p>
  * <p>
- * Last but not least, a pid can be defined in the first line of a cfg file by prefixing it with "pid:", e.g.
- * "pid: com.acme.smarthome.security".
+ * Last but not least, a pid can be defined in the first line of a cfg file by
+ * prefixing it with "pid:", e.g. "pid: com.acme.smarthome.security".
  *
  * @author Kai Kreuzer - Initial contribution and API
  */
 public class ConfigDispatcher extends AbstractWatchService {
 
-    /** The program argument name for setting the service config directory path */
+    /**
+     * The program argument name for setting the service config directory path
+     */
     final static public String SERVICEDIR_PROG_ARGUMENT = "smarthome.servicedir";
 
     /** The program argument name for setting the service pid namespace */
@@ -97,6 +109,10 @@ public class ConfigDispatcher extends AbstractWatchService {
     private final Logger logger = LoggerFactory.getLogger(ConfigDispatcher.class);
 
     private ConfigurationAdmin configAdmin;
+
+    // we need to cache a configuration for a file
+    // in case a content in that file is deleted
+    private Map<File, Map> fileMap = new HashMap<File, Map>();
 
     @Override
     public void activate() {
@@ -138,9 +154,8 @@ public class ConfigDispatcher extends AbstractWatchService {
     /*
      * (non-Javadoc)
      * 
-     * @see
-     * org.eclipse.smarthome.core.service.AbstractWatchService#watchSubDirectories
-     * ()
+     * @see org.eclipse.smarthome.core.service.AbstractWatchService#
+     * watchSubDirectories ()
      */
     @Override
     protected boolean watchSubDirectories() {
@@ -163,9 +178,8 @@ public class ConfigDispatcher extends AbstractWatchService {
     /*
      * (non-Javadoc)
      * 
-     * @see
-     * org.eclipse.smarthome.core.service.AbstractWatchService#buildWatchQueueReader
-     * (java.nio.file.WatchService, java.nio.file.Path)
+     * @see org.eclipse.smarthome.core.service.AbstractWatchService#
+     * buildWatchQueueReader (java.nio.file.WatchService, java.nio.file.Path)
      */
     @Override
     protected AbstractWatchQueueReader buildWatchQueueReader(WatchService watchService, Path toWatch,
@@ -195,6 +209,13 @@ public class ConfigDispatcher extends AbstractWatchService {
         File dir = new File(getSourcePath());
         if (dir.exists()) {
             File[] files = dir.listFiles();
+            // Sort the files by modification time,
+            // so that the last modified file is processed last.
+            Arrays.sort(files, new Comparator<File>() {
+                public int compare(File left, File right) {
+                    return Long.valueOf(left.lastModified()).compareTo(right.lastModified());
+                }
+            });
             for (File file : files) {
                 try {
                     processConfigFile(file);
@@ -246,6 +267,8 @@ public class ConfigDispatcher extends AbstractWatchService {
             pid = lines.get(0).substring(PID_MARKER.length()).trim();
         }
 
+        Dictionary currentProperties = new Hashtable();
+
         for (String line : lines) {
             String[] contents = parseLine(configFile.getPath(), line);
             // no valid configuration line, so continue
@@ -260,9 +283,9 @@ public class ConfigDispatcher extends AbstractWatchService {
                     pid = getServicePidNamespace() + "." + pid;
                 }
             }
-
             String property = contents[1];
             String value = contents[2];
+            currentProperties.put(property, value);
             Configuration configuration = configAdmin.getConfiguration(pid, null);
             if (configuration != null) {
                 Dictionary configProperties = configMap.get(configuration);
@@ -277,6 +300,36 @@ public class ConfigDispatcher extends AbstractWatchService {
                 }
             }
         }
+
+        if (fileMap.containsKey(configFile.getAbsoluteFile())) {
+            System.out.println("in the if: " + configFile);
+            Configuration configuration;
+            Dictionary cachedProperties;
+            Dictionary configProperties;
+            for (Object entry : fileMap.get(configFile.getAbsoluteFile()).keySet()) {
+                configuration = configAdmin.getConfiguration(((Configuration) entry).getPid(), null);
+                cachedProperties = ((Dictionary) fileMap.get(configFile.getAbsoluteFile()).get(configuration));
+                configProperties = configuration.getProperties();
+                if (cachedProperties != null) {
+                    for (Enumeration e = cachedProperties.keys(); e.hasMoreElements();) {
+                        String property = e.nextElement().toString();
+                        if (currentProperties.get(property) == null) {
+                            configProperties.remove(property);
+                        }
+                    }
+                }
+                if(currentProperties != null){
+                    for (Enumeration e = currentProperties.keys(); e.hasMoreElements();) {
+                        String property = e.nextElement().toString();
+                        configProperties.put(property, currentProperties.get(property));
+                    }
+                }
+                configMap.put(configuration, currentProperties);
+                configsToUpdate.put(configuration, configProperties);
+            }
+        }
+
+        fileMap.put(configFile.getAbsoluteFile(), configMap);
 
         for (Entry<Configuration, Dictionary> entry : configsToUpdate.entrySet()) {
             entry.getKey().update(entry.getValue());
@@ -316,6 +369,8 @@ public class ConfigDispatcher extends AbstractWatchService {
         protected void processWatchEvent(WatchEvent<?> event, Kind<?> kind, Path path) {
             if (kind == ENTRY_CREATE || kind == ENTRY_MODIFY) {
                 try {
+                    System.out.println("baseWatchedDir: " + baseWatchedDir);
+                    System.out.println("baseWatchedDir.toAbsolutePath(): " + baseWatchedDir.toAbsolutePath());
                     processConfigFile(new File(baseWatchedDir.toAbsolutePath() + File.separator + path.toString()));
                 } catch (IOException e) {
                     logger.warn("Could not process config file '{}': {}", path, e);

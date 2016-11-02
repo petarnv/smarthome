@@ -478,6 +478,7 @@ class AbstractWatchServiceTest extends OSGiTest {
                                 }
                             }
                             allFullEvents << fullEvent
+                            println "allFullEvents size: " + allFullEvents.size()
                         }
                     };
             queueReader.setWatchingDirectoryChanges(watchDirectoryChanges)

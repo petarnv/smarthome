@@ -388,10 +388,9 @@ class AbstractWatchServiceTest extends OSGiTest {
          * So, it's necessary to put some initial content in that file.
          */
         if(!SystemUtils.IS_OS_WINDOWS) {
+            println "MAC OS"
             file << "Initial content"
-            waitForAssert({
-                assertThat "The initial content was not added to the file", file.length() > 0, is(true)
-            })
+            sleep 10000
         }
         fullEventAssertionsByKind(fileName, ENTRY_CREATE, false)
 

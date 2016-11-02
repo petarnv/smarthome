@@ -389,6 +389,9 @@ class AbstractWatchServiceTest extends OSGiTest {
          */
         if(!SystemUtils.IS_OS_WINDOWS) {
             file << "Initial content"
+            waitForAssert({
+                assertThat "The initial content was not added to the file", file.length() > 0, is(true)
+            })
         }
         fullEventAssertionsByKind(fileName, ENTRY_CREATE, false)
 

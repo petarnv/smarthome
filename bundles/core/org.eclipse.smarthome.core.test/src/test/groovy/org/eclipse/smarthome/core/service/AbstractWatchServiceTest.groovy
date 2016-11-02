@@ -392,11 +392,11 @@ class AbstractWatchServiceTest extends OSGiTest {
             file << "Initial content"
             sleep 10000
         }
-        fullEventAssertionsByKind(fileName, ENTRY_CREATE, false)
+        fullEventAssertionsByKind(fileName, ENTRY_CREATE, true)
 
         // File modified
         file << "Additional content"
-        fullEventAssertionsByKind(fileName, ENTRY_MODIFY, false)
+        fullEventAssertionsByKind(fileName, ENTRY_MODIFY, true)
 
         // File deleted
         boolean isDeleted = file.delete()

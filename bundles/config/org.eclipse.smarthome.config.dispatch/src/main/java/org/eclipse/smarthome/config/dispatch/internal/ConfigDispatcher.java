@@ -20,12 +20,8 @@ import java.nio.file.WatchEvent;
 import java.nio.file.WatchEvent.Kind;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
-import java.util.Arrays;
-import java.util.Comparator;
 import java.util.Dictionary;
-import java.util.Enumeration;
 import java.util.HashMap;
-import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -112,7 +108,7 @@ public class ConfigDispatcher extends AbstractWatchService {
 
     // we need to cache a configuration for a file
     // in case a content in that file is deleted
-    private Map<File, Map> fileMap = new HashMap<File, Map>();
+    //private Map<File, Map> fileMap = new HashMap<File, Map>();
 
     @Override
     public void activate() {
@@ -211,11 +207,11 @@ public class ConfigDispatcher extends AbstractWatchService {
             File[] files = dir.listFiles();
             // Sort the files by modification time,
             // so that the last modified file is processed last.
-            Arrays.sort(files, new Comparator<File>() {
+            /*Arrays.sort(files, new Comparator<File>() {
                 public int compare(File left, File right) {
                     return Long.valueOf(left.lastModified()).compareTo(right.lastModified());
                 }
-            });
+            });*/
             for (File file : files) {
                 try {
                     processConfigFile(file);
@@ -267,7 +263,7 @@ public class ConfigDispatcher extends AbstractWatchService {
             pid = lines.get(0).substring(PID_MARKER.length()).trim();
         }
 
-        Dictionary currentProperties = new Hashtable();
+        //Dictionary currentProperties = new Hashtable();
 
         for (String line : lines) {
             String[] contents = parseLine(configFile.getPath(), line);
@@ -285,7 +281,7 @@ public class ConfigDispatcher extends AbstractWatchService {
             }
             String property = contents[1];
             String value = contents[2];
-            currentProperties.put(property, value);
+            //currentProperties.put(property, value);
             Configuration configuration = configAdmin.getConfiguration(pid, null);
             if (configuration != null) {
                 Dictionary configProperties = configMap.get(configuration);
@@ -301,7 +297,7 @@ public class ConfigDispatcher extends AbstractWatchService {
             }
         }
 
-        if (fileMap.containsKey(configFile.getAbsoluteFile())) {
+        /*if (fileMap.containsKey(configFile.getAbsoluteFile())) {
             System.out.println("in the if: " + configFile);
             Configuration configuration;
             Dictionary cachedProperties;
@@ -329,7 +325,7 @@ public class ConfigDispatcher extends AbstractWatchService {
             }
         }
 
-        fileMap.put(configFile.getAbsoluteFile(), configMap);
+        fileMap.put(configFile.getAbsoluteFile(), configMap);*/
 
         for (Entry<Configuration, Dictionary> entry : configsToUpdate.entrySet()) {
             entry.getKey().update(entry.getValue());
@@ -369,8 +365,6 @@ public class ConfigDispatcher extends AbstractWatchService {
         protected void processWatchEvent(WatchEvent<?> event, Kind<?> kind, Path path) {
             if (kind == ENTRY_CREATE || kind == ENTRY_MODIFY) {
                 try {
-                    System.out.println("baseWatchedDir: " + baseWatchedDir);
-                    System.out.println("baseWatchedDir.toAbsolutePath(): " + baseWatchedDir.toAbsolutePath());
                     processConfigFile(new File(baseWatchedDir.toAbsolutePath() + File.separator + path.toString()));
                 } catch (IOException e) {
                     logger.warn("Could not process config file '{}': {}", path, e);

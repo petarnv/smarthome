@@ -468,7 +468,9 @@ class AbstractWatchServiceTest extends OSGiTest {
             def queueReader = new AbstractWatchQueueReader(watchServiceImpl, toWatch,registeredKeys) {
                         @Override
                         protected void processWatchEvent(WatchEvent<?> event, Kind<?> kind, Path path) {
+                            println "kind: " + kind
                             FullEvent fullEvent = new FullEvent(event,kind,path)
+                            println "fullEvent kind: " + fullEvent.eventKind
                             if (kind.equals(ENTRY_CREATE)) {
                                 Path relativePath = baseWatchedDir.resolve(path);
                                 if (relativePath.toFile().isDirectory() && watchSubDirectories()) {

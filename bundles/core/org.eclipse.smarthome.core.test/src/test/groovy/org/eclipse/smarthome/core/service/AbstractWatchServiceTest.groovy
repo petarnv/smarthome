@@ -383,7 +383,13 @@ class AbstractWatchServiceTest extends OSGiTest {
 
         boolean isCreated = file.createNewFile()
         assertThat "The file '$file.absolutePath' was not created successfully", isCreated, is(true)
-
+        /*
+         * In some OS, like MacOS, creating an empty file is not related to sending an ENTRY_CREATE event.
+         * So, it's necessary to put some initial content in that file.
+         */
+        if(!SystemUtils.IS_OS_WINDOWS) {
+            file << "Initial content"
+        }
         fullEventAssertionsByKind(fileName, ENTRY_CREATE, false)
 
         // File modified

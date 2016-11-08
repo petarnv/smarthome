@@ -23,6 +23,7 @@ import org.eclipse.smarthome.automation.Trigger
 import org.eclipse.smarthome.automation.events.RuleStatusInfoEvent
 import org.eclipse.smarthome.automation.module.core.handler.CompareConditionHandler
 import org.eclipse.smarthome.automation.type.ModuleTypeRegistry
+import org.eclipse.smarthome.config.core.Configuration
 import org.eclipse.smarthome.core.events.Event
 import org.eclipse.smarthome.core.events.EventPublisher
 import org.eclipse.smarthome.core.events.EventSubscriber
@@ -45,7 +46,6 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
 import com.google.common.collect.Sets
-
 /**
  * this tests the RuleEngine
  *
@@ -125,10 +125,10 @@ class RuntimeRuleTest extends OSGiTest{
     @Test
     public void 'assert that item state is updated by simple rule'() {
         //Creation of RULE
-        def triggerConfig = [eventSource:"myMotionItem2", eventTopic:"smarthome/*", eventTypes:"ItemStateEvent"]
-        def condition1Config = [operator:"=", itemName:"myPresenceItem2", state:"ON"]
-        def condition2Config = [itemName:"myMotionItem2"]
-        def actionConfig = [itemName:"myLampItem2", command:"ON"]
+        def triggerConfig = new Configuration([eventSource:"myMotionItem2", eventTopic:"smarthome/*", eventTypes:"ItemStateEvent"])
+        def condition1Config = new Configuration([operator:"=", itemName:"myPresenceItem2", state:"ON"])
+        def condition2Config = new Configuration([itemName:"myMotionItem2"])
+        def actionConfig = new Configuration([itemName:"myLampItem2", command:"ON"])
         def triggers = [new Trigger("ItemStateChangeTrigger2", "GenericEventTrigger", triggerConfig)]
         def conditions = [new Condition("ItemStateCondition3", "ItemStateCondition", condition1Config, null), new Condition("ItemStateCondition4", "ItemStateEvent_ON_Condition", condition2Config, [event:"ItemStateChangeTrigger2.event"])]
         def actions = [new Action("ItemPostCommandAction2", "ItemPostCommandAction", actionConfig, null)]
@@ -147,7 +147,7 @@ class RuntimeRuleTest extends OSGiTest{
         ruleRegistry.setEnabled(rule.UID, true)
 
         waitForAssert({
-            assertThat ruleRegistry.getStatus(rule.UID).status, is(RuleStatus.IDLE)
+            assertThat ruleRegistry.getStatusInfo(rule.UID).status, is(RuleStatus.IDLE)
         })
         //TEST RULE
 
@@ -203,7 +203,7 @@ class RuntimeRuleTest extends OSGiTest{
 
     @Test
     public void 'assert that compareCondition works'(){
-        def conditionConfiguration = [right:"ON", operator:"="]
+        def conditionConfiguration = new Configuration([right:"ON", operator:"="])
         def inputs = [input:"someTrigger.someoutput"]
         def Condition condition = new Condition("id", "GenericCompareCondition", conditionConfiguration, inputs)
         def handler = new CompareConditionHandler(condition)
@@ -269,10 +269,10 @@ class RuntimeRuleTest extends OSGiTest{
     public void 'assert that rule is triggered by composite trigger'() {
 
         //Test the creation of a rule out of
-        def triggerConfig = [itemName:"myMotionItem3"]
-        def condition1Config = [operator:"=", itemName:"myPresenceItem3", state:"ON"]
-        def condition2Config = [itemName:"myMotionItem3"]
-        def actionConfig = [itemName:"myLampItem3", command:"ON"]
+        def triggerConfig = new Configuration([itemName:"myMotionItem3"])
+        def condition1Config = new Configuration([operator:"=", itemName:"myPresenceItem3", state:"ON"])
+        def condition2Config = new Configuration([itemName:"myMotionItem3"])
+        def actionConfig = new Configuration([itemName:"myLampItem3", command:"ON"])
         def triggers = [new Trigger("ItemStateChangeTrigger3", "ItemStateChangeTrigger", triggerConfig)]
         def conditions = [new Condition("ItemStateCondition5", "ItemStateCondition", condition1Config, null), new Condition("ItemStateCondition6", "ItemStateEvent_ON_Condition", condition2Config, [event:"ItemStateChangeTrigger3.event"])]
         def actions = [new Action("ItemPostCommandAction3", "ItemPostCommandAction", actionConfig, null)]
@@ -290,7 +290,7 @@ class RuntimeRuleTest extends OSGiTest{
 
         //TEST RULE
         waitForAssert({
-            assertThat ruleRegistry.getStatus(rule.uid).getStatus(), is(RuleStatus.IDLE)
+            assertThat ruleRegistry.getStatusInfo(rule.uid).getStatus(), is(RuleStatus.IDLE)
         })
 
         def ruleEvent = null
@@ -343,4 +343,73 @@ class RuntimeRuleTest extends OSGiTest{
         })
 
     }
+
+    @Test @Ignore
+    public void 'assert that RuleEnableHandlerWorks'() {
+        def ruleRegistry = getService(RuleRegistry)
+        def firstRuleUID = "FirstTestRule"
+        def secondRuleUID = "SecondTestRule"
+        def thirdRuleUID = "ThirdTestRule"
+        def firstConfig = ["FirstTestRule", "SecondTestRule"]
+        def secondConfig = ["FirstTestRule"]
+
+        def firstRuleAction = "firstRuleAction"
+        def secondRuleAction = "secondRuleAction"
+
+        try {
+            def triggerConfig = new Configuration([itemName:"myMotionItem3"])
+            def actionConfig = new Configuration([enable:false, ruleUIDs:firstConfig])
+            def triggers = [new Trigger("ItemStateChangeTrigger3", "ItemStateChangeTrigger", triggerConfig)]
+            def actions = [new Action("RuleAction", "RuleEnablementAction", actionConfig, null)]
+            def rule = new Rule(firstRuleAction)
+            rule.triggers = triggers
+            rule.actions = actions
+
+            ruleRegistry.add(new Rule(firstRuleUID))
+            ruleRegistry.add(new Rule(secondRuleUID))
+            ruleRegistry.add(new Rule(thirdRuleUID))
+            ruleRegistry.add(rule)
+
+            def ItemRegistry itemRegistry = getService(ItemRegistry)
+            def EventPublisher eventPublisher = getService(EventPublisher)
+            SwitchItem myMotionItem = itemRegistry.getItem("myMotionItem3")
+            Command commandObjMotion = TypeParser.parseCommand(myMotionItem.getAcceptedCommandTypes(), "ON")
+            eventPublisher.post(ItemEventFactory.createCommandEvent("myMotionItem3", commandObjMotion))
+
+
+            waitForAssert({
+                assertThat ruleRegistry.getStatus(firstRuleUID), is(RuleStatus.DISABLED)
+                assertThat ruleRegistry.getStatus(secondRuleUID), is(RuleStatus.DISABLED)
+                assertThat ruleRegistry.getStatus(thirdRuleUID), is(RuleStatus.IDLE)
+            },1000,100)
+
+            triggerConfig = new Configuration([itemName:"myMotionItem3"])
+            actionConfig = new Configuration([enable:true, ruleUIDs:secondConfig])
+            triggers = [new Trigger("ItemStateChangeTrigger3", "ItemStateChangeTrigger", triggerConfig)]
+            actions = [new Action("RuleAction", "RuleEnablementAction", actionConfig, null)]
+            rule = new Rule(secondRuleAction)
+            rule.triggers = triggers
+            rule.actions = actions
+            ruleRegistry.add(rule)
+
+            myMotionItem = itemRegistry.getItem("myMotionItem3")
+            commandObjMotion = TypeParser.parseCommand(myMotionItem.getAcceptedCommandTypes(), "OFF")
+            eventPublisher.post(ItemEventFactory.createCommandEvent("myMotionItem3", commandObjMotion))
+
+            waitForAssert({
+                assertThat ruleRegistry.getStatus(firstRuleUID), is(RuleStatus.IDLE)
+                assertThat ruleRegistry.getStatus(secondRuleUID), is(RuleStatus.DISABLED)
+                assertThat ruleRegistry.getStatus(thirdRuleUID), is(RuleStatus.IDLE)
+
+            },1000,100)
+
+        } finally {
+            ruleRegistry.remove(firstRuleUID)
+            ruleRegistry.remove(secondRuleUID)
+            ruleRegistry.remove(thirdRuleUID)
+            ruleRegistry.remove(firstRuleAction)
+            ruleRegistry.remove(secondRuleAction)
+        }
+    }
+
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-2015 openHAB UG (haftungsbeschraenkt) and others.
+ * Copyright (c) 2014-2016 by the respective copyright holders.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -17,7 +17,9 @@ import nl.q42.jue.exceptions.LinkButtonException
 import nl.q42.jue.exceptions.UnauthorizedException
 
 import org.eclipse.smarthome.binding.hue.handler.HueBridgeHandler
+import org.eclipse.smarthome.binding.hue.internal.HueConfigStatusMessage
 import org.eclipse.smarthome.config.core.Configuration
+import org.eclipse.smarthome.config.core.status.ConfigStatusMessage
 import org.eclipse.smarthome.core.thing.Bridge
 import org.eclipse.smarthome.core.thing.ThingRegistry
 import org.eclipse.smarthome.core.thing.ThingStatus
@@ -205,6 +207,66 @@ class HueBridgeHandlerOSGiTest extends OSGiTest {
         assertThat(bridge.getConfiguration().get(USER_NAME), is(nullValue()))
         assertThat(bridge.getStatus(), equalTo(ThingStatus.OFFLINE))
         assertThat(bridge.getStatusInfo().getStatusDetail(), equalTo(ThingStatusDetail.OFFLINE.CONFIGURATION_ERROR))
+    }
+
+    @Test
+    void 'verify offline is set without bridge offline status'() {
+        Configuration configuration = new Configuration().with {
+            put(HOST, DUMMY_HOST)
+            put(SERIAL_NUMBER, "testSerialNumber")
+            it
+        }
+        Bridge bridge = createBridgeThing(configuration)
+
+        HueBridgeHandler hueBridgeHandler = getRegisteredHueBridgeHandler()
+        hueBridgeHandler.thingUpdated(bridge)
+
+        hueBridgeHandler.onConnectionLost(hueBridgeHandler.bridge)
+
+        assertThat(bridge.getStatus(), is(ThingStatus.OFFLINE))
+        assertThat(bridge.getStatusInfo().getStatusDetail(), is(not(ThingStatusDetail.BRIDGE_OFFLINE)))
+    }
+	
+    @Test
+    void 'assert that a status configuration message for missing bridge IP is properly returned (IP is null)'() {
+    	Configuration configuration = new Configuration().with {
+            put(HOST, null)
+            put(SERIAL_NUMBER, "testSerialNumber")
+            it
+        }
+
+        createBridgeThing(configuration)
+
+        HueBridgeHandler hueBridgeHandler = getRegisteredHueBridgeHandler()
+                
+        def expected = ConfigStatusMessage.Builder.error(HOST)
+                    .withMessageKeySuffix(HueConfigStatusMessage.IP_ADDRESS_MISSING.getMessageKey()).withArguments(HOST)
+                    .build()
+
+        waitForAssert {
+            assertThat hueBridgeHandler.getConfigStatus().first(), is(expected)
+        }
+    }
+    
+    @Test
+    void 'assert that a status configuration message for missing bridge IP is properly returned (IP is an empty string)'() {
+        Configuration configuration = new Configuration().with {
+            put(HOST, "")
+            put(SERIAL_NUMBER, "testSerialNumber")
+            it
+        }
+
+        createBridgeThing(configuration)
+
+        HueBridgeHandler hueBridgeHandler = getRegisteredHueBridgeHandler()
+                
+        def expected = ConfigStatusMessage.Builder.error(HOST)
+                    .withMessageKeySuffix(HueConfigStatusMessage.IP_ADDRESS_MISSING.getMessageKey()).withArguments(HOST)
+                    .build()
+
+        waitForAssert {
+            assertThat hueBridgeHandler.getConfigStatus().first(), is(expected)
+        }
     }
 
     private Bridge createBridgeThing(Configuration configuration){

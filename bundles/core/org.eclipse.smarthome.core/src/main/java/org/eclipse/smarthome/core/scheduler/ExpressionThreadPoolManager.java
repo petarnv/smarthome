@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-2015 openHAB UG (haftungsbeschraenkt) and others.
+ * Copyright (c) 2014-2016 by the respective copyright holders.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -14,6 +14,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
@@ -50,13 +51,13 @@ public class ExpressionThreadPoolManager extends ThreadPoolManager {
                 // do a double check if it is still null or if another thread might have created it meanwhile
                 pool = pools.get(poolName);
                 if (pool == null) {
-                    int[] cfg = getConfig(poolName);
-                    pool = new ExpressionThreadPoolExecutor(poolName, cfg[0]);
+                    Integer cfg = getConfig(poolName);
+                    pool = new ExpressionThreadPoolExecutor(poolName, cfg);
                     ((ThreadPoolExecutor) pool).setKeepAliveTime(THREAD_TIMEOUT, TimeUnit.SECONDS);
                     ((ThreadPoolExecutor) pool).allowCoreThreadTimeOut(true);
                     pools.put(poolName, pool);
                     logger.debug("Created an expression-drive scheduled thread pool '{}' of size {}",
-                            new Object[] { poolName, cfg[0] });
+                            new Object[] { poolName, cfg });
                 }
             }
         }
@@ -70,7 +71,7 @@ public class ExpressionThreadPoolManager extends ThreadPoolManager {
     public static class ExpressionThreadPoolExecutor extends ScheduledThreadPoolExecutor {
 
         private List<Runnable> running = Collections.synchronizedList(new ArrayList<Runnable>());
-        private Map<Expression, Runnable> scheduled = Collections.synchronizedMap(new HashMap<Expression, Runnable>());
+        private Map<Expression, Runnable> scheduled = new ConcurrentHashMap<>();
         private Map<Runnable, Future<?>> futures = Collections.synchronizedMap(new HashMap<Runnable, Future<?>>());
         private Map<Future<?>, Date> timestamps = Collections.synchronizedMap(new HashMap<Future<?>, Date>());
         private Thread monitor;

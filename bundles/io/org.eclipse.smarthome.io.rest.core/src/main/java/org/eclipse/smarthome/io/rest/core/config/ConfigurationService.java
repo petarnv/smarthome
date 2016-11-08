@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-2015 openHAB UG (haftungsbeschraenkt) and others.
+ * Copyright (c) 2014-2016 by the respective copyright holders.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -79,7 +79,9 @@ public class ConfigurationService {
         }
         for (Entry<String, Object> configurationParameter : configurationParameters) {
             Object value = configurationParameter.getValue();
-            if (value == null || value instanceof String || value instanceof Integer || value instanceof Boolean) {
+            if (value == null) {
+                properties.remove(configurationParameter.getKey());
+            } else if (value instanceof String || value instanceof Integer || value instanceof Boolean) {
                 properties.put(configurationParameter.getKey(), value);
             } else {
                 // the config admin does not support complex object types, so let's store the string representation

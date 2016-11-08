@@ -10,7 +10,6 @@ package org.eclipse.smarthome.automation.core.internal;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Dictionary;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -35,7 +34,6 @@ import org.eclipse.smarthome.automation.StatusInfoCallback;
 import org.eclipse.smarthome.automation.Trigger;
 import org.eclipse.smarthome.automation.core.internal.RuleEngineCallbackImpl.TriggerData;
 import org.eclipse.smarthome.automation.core.internal.composite.CompositeModuleHandlerFactory;
-import org.eclipse.smarthome.automation.core.internal.type.ModuleTypeManager;
 import org.eclipse.smarthome.automation.core.util.ConnectionValidator;
 import org.eclipse.smarthome.automation.handler.ActionHandler;
 import org.eclipse.smarthome.automation.handler.ConditionHandler;
@@ -50,16 +48,16 @@ import org.eclipse.smarthome.automation.type.CompositeTriggerType;
 import org.eclipse.smarthome.automation.type.ConditionType;
 import org.eclipse.smarthome.automation.type.Input;
 import org.eclipse.smarthome.automation.type.ModuleType;
+import org.eclipse.smarthome.automation.type.ModuleTypeProvider;
+import org.eclipse.smarthome.automation.type.ModuleTypeRegistry;
 import org.eclipse.smarthome.automation.type.Output;
 import org.eclipse.smarthome.automation.type.TriggerType;
 import org.eclipse.smarthome.config.core.ConfigDescriptionParameter;
 import org.eclipse.smarthome.config.core.ConfigDescriptionParameter.Type;
+import org.eclipse.smarthome.config.core.ConfigUtil;
+import org.eclipse.smarthome.config.core.Configuration;
 import org.osgi.framework.BundleContext;
-import org.osgi.framework.ServiceReference;
-import org.osgi.service.cm.ConfigurationException;
-import org.osgi.service.cm.ManagedService;
-import org.osgi.util.tracker.ServiceTracker;
-import org.osgi.util.tracker.ServiceTrackerCustomizer;
+import org.osgi.framework.InvalidSyntaxException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -81,8 +79,7 @@ import org.slf4j.LoggerFactory;
  *
  */
 @SuppressWarnings("rawtypes")
-public class RuleEngine
-        implements ServiceTrackerCustomizer/* <ModuleHandlerFactory, ModuleHandlerFactory> */, ManagedService {
+public class RuleEngine {
 
     /**
      * Constant defining separator between module uid and output name.
@@ -107,7 +104,7 @@ public class RuleEngine
     /**
      * Delay between rule's re-initialization tries.
      */
-    private long scheduleReinitializationDelay = DEFAULT_REINITIALIZATION_DELAY;
+    private long scheduleReinitializationDelay;
 
     /**
      * {@link Map} of rule's id to corresponding {@link RuleEngineCallback}s. For each {@link Rule} there is one and
@@ -127,17 +124,6 @@ public class RuleEngine
     private Map<String, RuntimeRule> rules;
 
     /**
-     * Tracker of module handler factories. Each factory has a type which can evaluate. This type corresponds to the
-     * system module type of the module.
-     */
-    private ServiceTracker/* <ModuleHandlerFactory, ModuleHandlerFactory> */ mhfTracker;
-
-    /**
-     * Bundle context field.
-     */
-    BundleContext bc;
-
-    /**
      * {@link Map} system module type to corresponding module handler factories.
      */
     private Map<String, ModuleHandlerFactory> moduleHandlerFactories;
@@ -152,13 +138,13 @@ public class RuleEngine
      */
     private Map<String, RuleStatusInfo> statusMap = new HashMap<String, RuleStatusInfo>();
 
-    protected Logger logger;
+    protected Logger logger = LoggerFactory.getLogger(RuleEngine.class.getName());
 
     private StatusInfoCallback statusInfoCallback;
 
     private Map<String, Map<String, Object>> contextMap;
 
-    private ModuleTypeManager mtManager;
+    private ModuleTypeRegistry mtRegistry;
 
     private CompositeModuleHandlerFactory compositeFactory;
 
@@ -173,20 +159,68 @@ public class RuleEngine
      * services.
      *
      * @param bc {@link BundleContext} used for tracker registration and rule engine logger creation.
+     * @throws InvalidSyntaxException
      */
-    @SuppressWarnings("unchecked")
-    public RuleEngine(BundleContext bc) {
-        this.bc = bc;
-        logger = LoggerFactory.getLogger(getClass());
-        contextMap = new HashMap<String, Map<String, Object>>();
-        if (rules == null) {
-            rules = new HashMap<String, RuntimeRule>(20);
-        }
-        moduleHandlerFactories = new HashMap<String, ModuleHandlerFactory>(20);
-        mhfTracker = new ServiceTracker/* <ModuleHandlerFactory, ModuleHandlerFactory> */(bc,
-                ModuleHandlerFactory.class.getName(), this);
-        mhfTracker.open();
+    public RuleEngine() {
+        this.rules = new HashMap<String, RuntimeRule>(20);
+        this.contextMap = new HashMap<String, Map<String, Object>>();
+        this.moduleHandlerFactories = new HashMap<String, ModuleHandlerFactory>(20);
+    }
 
+    protected void setModuleTypeRegistry(ModuleTypeRegistry moduleTypeRegistry) {
+        this.mtRegistry = moduleTypeRegistry;
+        ConnectionValidator.setRegistry(mtRegistry);
+    }
+
+    protected void setCompositeModuleHandlerFactory(CompositeModuleHandlerFactory compositeFactory) {
+        this.compositeFactory = compositeFactory;
+    }
+
+    protected void addModuleTypeProvider(ModuleTypeProvider moduleTypeProvider) {
+        logger.debug("ModuleTypeProvider added.");
+        moduleTypeUpdated(moduleTypeProvider.getModuleTypes(null));
+    }
+
+    protected void updatedModuleTypeProvider(ModuleTypeProvider moduleTypeProvider) {
+        logger.debug("ModuleTypeProvider updated.");
+        moduleTypeUpdated(moduleTypeProvider.getModuleTypes(null));
+    }
+
+    protected void addModuleHandlerFactory(ModuleHandlerFactory moduleHandlerFactory) {
+        logger.debug("ModuleHandlerFactory added.");
+        Collection<String> moduleTypes = moduleHandlerFactory.getTypes();
+        addNewModuleTypes(moduleHandlerFactory, moduleTypes);
+    }
+
+    protected void updatedModuleHandlerFactory(ModuleHandlerFactory moduleHandlerFactory) {
+        logger.debug("ModuleHandlerFactory updated, updating handlers");
+        Collection<String> types = new HashSet<String>(moduleHandlerFactory.getTypes());
+        HashSet<String> newTypes = new HashSet<String>(moduleHandlerFactory.getTypes());
+        ArrayList<String> removedTypes = new ArrayList<String>();
+
+        for (Map.Entry<String, ModuleHandlerFactory> entry : moduleHandlerFactories.entrySet()) {
+            if (entry.getValue().equals(moduleHandlerFactory)) {
+                String key = entry.getKey();
+                if (types.contains(key)) {
+                    newTypes.remove(key);
+                } else {
+                    removedTypes.add(key);
+                }
+            }
+        }
+
+        if (removedTypes.size() > 0) {
+            removeMissingModuleTypes(removedTypes);
+        }
+
+        if (newTypes.size() > 0) {
+            addNewModuleTypes(moduleHandlerFactory, newTypes);
+        }
+    }
+
+    protected void removeModuleHandlerFactory(ModuleHandlerFactory moduleHandlerFactory) {
+        Collection<String> moduleTypes = moduleHandlerFactory.getTypes();
+        removeMissingModuleTypes(moduleTypes);
     }
 
     /**
@@ -197,18 +231,6 @@ public class RuleEngine
      * @return UID of added rule.
      */
     public Rule addRule(Rule rule, boolean isEnabled) {
-        return addRule0(rule, isEnabled);
-    }
-
-    /**
-     * Utility method that adds rule into rule engine. It creates internal RuleImpl object which is deep copy of the
-     * passed {@link Rule} object and adds this copy into RuleEngine
-     *
-     * @param rule a rule which has to be added
-     * @param isEnabled
-     * @throws IllegalArgumentException when the rule with the same UID is already added.
-     */
-    private Rule addRule0(Rule rule, boolean isEnabled) {
         RuntimeRule rr;
         Rule ruleWithUID;
         String rUID = rule.getUID();
@@ -253,7 +275,7 @@ public class RuleEngine
      * @param modules list of trigger, condition and action modules
      * @throws IllegalArgumentException when a module id contains dot.
      */
-    private void validateModules(List<Module> modules) {
+    protected void validateModules(List<Module> modules) {
         for (Module m : modules) {
             String mId = m.getId();
             if (mId == null || !mId.matches("[A-Za-z0-9_-]*")) {
@@ -342,6 +364,10 @@ public class RuleEngine
 
         String errMsgs = null;
         RuntimeRule r = getRule0(rUID);
+        if (r.getTemplateUID() != null) {
+            return; // Template is not available (when a template is resolved it removes tempalteUID configuration
+                    // property). The rule must stay NOT_INITIALISED.
+        }
 
         autoMapConnections(r);
 
@@ -418,20 +444,29 @@ public class RuleEngine
         if (modules != null) {
             for (T m : modules) {
                 updateMapModuleTypeToRule(rUID, m.getTypeUID());
-                ModuleHandler moduleHandler = getModuleHandler(m, rUID);
-                if (moduleHandler != null) {
-                    if (m instanceof RuntimeAction) {
-                        ((RuntimeAction) m).setModuleHandler((ActionHandler) moduleHandler);
-                    } else if (m instanceof RuntimeCondition) {
-                        ((RuntimeCondition) m).setModuleHandler((ConditionHandler) moduleHandler);
-                    } else if (m instanceof RuntimeTrigger) {
-                        ((RuntimeTrigger) m).setModuleHandler((TriggerHandler) moduleHandler);
+                try {
+                    ModuleHandler moduleHandler = getModuleHandler(m, rUID);
+                    if (moduleHandler != null) {
+                        if (m instanceof RuntimeAction) {
+                            ((RuntimeAction) m).setModuleHandler((ActionHandler) moduleHandler);
+                        } else if (m instanceof RuntimeCondition) {
+                            ((RuntimeCondition) m).setModuleHandler((ConditionHandler) moduleHandler);
+                        } else if (m instanceof RuntimeTrigger) {
+                            ((RuntimeTrigger) m).setModuleHandler((TriggerHandler) moduleHandler);
+                        }
+                    } else {
+                        if (sb == null) {
+                            sb = new StringBuffer();
+                        }
+                        String message = "Missing handler '" + m.getTypeUID() + "' for module '" + m.getId() + "'";
+                        sb.append(message).append("\n");
+                        logger.trace(message);
                     }
-                } else {
+                } catch (Throwable t) {
                     if (sb == null) {
                         sb = new StringBuffer();
                     }
-                    String message = "Missing handler  '" + m.getTypeUID() + "' for module '" + m.getId() + "'";
+                    String message = "Getting handler '" + m.getTypeUID() + "' for module '" + m.getId() + "' fails";
                     sb.append(message).append("\n");
                     logger.trace(message);
                 }
@@ -474,7 +509,7 @@ public class RuleEngine
                 }
 
                 if (handler != null) {
-                    ModuleHandlerFactory factory = getModuleHandlerFactory(m.getTypeUID(), ruleUID);
+                    ModuleHandlerFactory factory = getModuleHandlerFactory(m.getTypeUID());
                     if (factory != null) {
                         factory.ungetHandler(m, ruleUID, handler);
                     }
@@ -533,17 +568,17 @@ public class RuleEngine
      */
     public ModuleHandler getModuleHandler(Module m, String ruleUID) {
         String moduleTypeId = m.getTypeUID();
-        ModuleHandlerFactory mhf = getModuleHandlerFactory(moduleTypeId, ruleUID);
-        if (mhf == null || mtManager.get(moduleTypeId) == null) {
+        ModuleHandlerFactory mhf = getModuleHandlerFactory(moduleTypeId);
+        if (mhf == null || mtRegistry.get(moduleTypeId) == null) {
             return null;
         }
         return mhf.getHandler(m, ruleUID);
     }
 
-    public ModuleHandlerFactory getModuleHandlerFactory(String moduleTypeId, String rUID) {
+    public ModuleHandlerFactory getModuleHandlerFactory(String moduleTypeId) {
         ModuleHandlerFactory mhf = moduleHandlerFactories.get(moduleTypeId);
         if (mhf == null) {
-            ModuleType mt = mtManager.get(moduleTypeId);
+            ModuleType mt = mtRegistry.get(moduleTypeId);
             if (mt instanceof CompositeTriggerType || //
                     mt instanceof CompositeConditionType || //
                     mt instanceof CompositeActionType) {
@@ -727,22 +762,6 @@ public class RuleEngine
         return rules.get(rUID) != null;
     }
 
-    /**
-     * This method tracks for {@link ModuleHandlerFactory}s. When a new factory is appeared it is added to the
-     * {@link #moduleHandlerFactories} map and all rules which are waiting for handlers handled by this factory are
-     * tried to be initialized.
-     *
-     * @see org.osgi.util.tracker.ServiceTrackerCustomizer#addingService(org.osgi.framework.ServiceReference)
-     */
-    @Override
-    public ModuleHandlerFactory addingService(ServiceReference/* <ModuleHandlerFactory> */ reference) {
-        @SuppressWarnings("unchecked")
-        ModuleHandlerFactory mhf = (ModuleHandlerFactory) bc.getService(reference);
-        Collection<String> moduleTypes = mhf.getTypes();
-        addNewModuleTypes(mhf, moduleTypes);
-        return mhf;
-    }
-
     private void addNewModuleTypes(ModuleHandlerFactory mhf, Collection<String> moduleTypes) {
         Set<String> notInitailizedRules = null;
         for (Iterator<String> it = moduleTypes.iterator(); it.hasNext();) {
@@ -784,57 +803,6 @@ public class RuleEngine
             }, scheduleReinitializationDelay, TimeUnit.MILLISECONDS);
             scheduleTasks.put(rUID, f);
         }
-    }
-
-    /**
-     * This method tracks for modification of {@link ModuleHandlerFactory} service. This is used if the factory can
-     * dynamically change its supported ModuleHandlers.
-     *
-     * @see org.osgi.util.tracker.ServiceTrackerCustomizer#modifiedService(org.osgi.framework.ServiceReference,
-     *      java.lang.Object)
-     */
-    @Override
-    public void modifiedService(ServiceReference/* <ModuleHandlerFactory> */ reference,
-            /* ModuleHandlerFactory */Object service) {
-        logger.debug("ModuleHandlerFactory modified, updating handlers");
-        ModuleHandlerFactory moduleHandlerFactory = ((ModuleHandlerFactory) service);
-
-        Collection<String> types = new HashSet<String>(moduleHandlerFactory.getTypes());
-        HashSet<String> newTypes = new HashSet<String>(moduleHandlerFactory.getTypes());
-        ArrayList<String> removedTypes = new ArrayList<String>();
-
-        for (Map.Entry<String, ModuleHandlerFactory> entry : moduleHandlerFactories.entrySet()) {
-            if (entry.getValue().equals(moduleHandlerFactory)) {
-                String key = entry.getKey();
-                if (types.contains(key)) {
-                    newTypes.remove(key);
-                } else {
-                    removedTypes.add(key);
-                }
-            }
-        }
-
-        if (removedTypes.size() > 0) {
-            removeMissingModuleTypes(removedTypes);
-        }
-
-        if (newTypes.size() > 0) {
-            addNewModuleTypes(moduleHandlerFactory, newTypes);
-        }
-    }
-
-    /**
-     * This method tracks for disappearing of {@link ModuleHandlerFactory} service. It unregister all rules using module
-     * handlers handled by this factory.
-     *
-     * @see org.osgi.util.tracker.ServiceTrackerCustomizer#removedService(org.osgi.framework.ServiceReference,
-     *      java.lang.Object)
-     */
-    @Override
-    public void removedService(ServiceReference/* <ModuleHandlerFactory> */ reference, /* ModuleHandlerFactory */
-            Object service) {
-        Collection<String> moduleTypes = ((ModuleHandlerFactory) service).getTypes();
-        removeMissingModuleTypes(moduleTypes);
     }
 
     private void removeMissingModuleTypes(Collection<String> moduleTypes) {
@@ -895,33 +863,39 @@ public class RuleEngine
      * @param td {@link TriggerData} object containing new values for {@link Trigger}'s {@link Output}s
      */
     protected void runRule(RuntimeRule rule, RuleEngineCallbackImpl.TriggerData td) {
-        RuleStatus ruleStatus = getRuleStatus(rule.getUID());
-        if (ruleStatus == RuleStatus.IDLE) {
-            try {
+        final String uid = rule.getUID();
 
-                // change state to RUNNING
-                setRuleStatusInfo(rule.getUID(), new RuleStatusInfo(RuleStatus.RUNNING));
-                clearContext(rule);
-
-                setTriggerOutputs(rule.getUID(), td);
-                boolean isSatisfied = calculateConditions(rule);
-                if (isSatisfied) {
-                    executeActions(rule);
-                    logger.debug("The rule '{}' is executed.", rule.getUID());
-                } else {
-                    logger.debug("The rule '{}' is NOT executed, since it has unsatisfied conditions.", rule.getUID());
-                }
-            } catch (Throwable t) {
-                logger.error("Fail to execute rule '{}': {}", new Object[] { rule.getUID(), t.getMessage() }, t);
+        synchronized (this) {
+            final RuleStatus ruleStatus = getRuleStatus(uid);
+            if (ruleStatus != RuleStatus.IDLE) {
+                logger.error("Trying to execute rule ‘{}' with status '{}'", uid, ruleStatus.getValue());
+                return;
             }
-
-            // change state to IDLE
-            setRuleStatusInfo(rule.getUID(), new RuleStatusInfo(RuleStatus.IDLE));
-        } else {
-            logger.error("Trying to execute rule ‘{}' with status '{}'",
-                    new Object[] { rule.getUID(), ruleStatus.getValue() });
+            // change state to RUNNING
+            setRuleStatusInfo(uid, new RuleStatusInfo(RuleStatus.RUNNING));
         }
 
+        try {
+            clearContext(rule);
+
+            setTriggerOutputs(uid, td);
+            boolean isSatisfied = calculateConditions(rule);
+            if (isSatisfied) {
+                executeActions(rule);
+                logger.debug("The rule '{}' is executed.", uid);
+            } else {
+                logger.debug("The rule '{}' is NOT executed, since it has unsatisfied conditions.", uid);
+            }
+        } catch (Throwable t) {
+            logger.error("Fail to execute rule '{}': {}", new Object[] { rule.getUID(), t.getMessage() }, t);
+        }
+
+        // change state to IDLE only if the rule has not been DISABLED.
+        synchronized (this) {
+            if (getRuleStatus(uid) != RuleStatus.DISABLED) {
+                setRuleStatusInfo(uid, new RuleStatusInfo(RuleStatus.IDLE));
+            }
+        }
     }
 
     private void clearContext(RuntimeRule rule) {
@@ -1051,10 +1025,6 @@ public class RuleEngine
     public synchronized void dispose() {
         if (!isDisposed) {
             isDisposed = true;
-            if (mhfTracker != null) {
-                mhfTracker.close();
-                mhfTracker = null;
-            }
             for (Iterator<RuntimeRule> it = rules.values().iterator(); it.hasNext();) {
                 RuntimeRule r = it.next();
                 removeRuleEntry(r);
@@ -1175,34 +1145,30 @@ public class RuleEngine
         this.statusInfoCallback = statusInfoCallback;
     }
 
-    protected void setModuleTypeManager(ModuleTypeManager mtManager) {
-        this.mtManager = mtManager;
-    }
-
-    protected void setCompositeModuleFactory(CompositeModuleHandlerFactory compositeFactory) {
-        this.compositeFactory = compositeFactory;
-    }
-
     private void resolveDefaultValues(RuntimeRule r) {
-        setDefautlValues(r.getUID(), r.getTriggers());
-        setDefautlValues(r.getUID(), r.getConditions());
-        setDefautlValues(r.getUID(), r.getActions());
+        setDefaultAndNormalizeConfigValues(r.getUID(), r.getTriggers());
+        setDefaultAndNormalizeConfigValues(r.getUID(), r.getConditions());
+        setDefaultAndNormalizeConfigValues(r.getUID(), r.getActions());
     }
 
-    private <T extends Module> void setDefautlValues(String ruleUID, List<T> modules) {
+    private <T extends Module> void setDefaultAndNormalizeConfigValues(String ruleUID, List<T> modules) {
         for (T module : modules) {
-            Map<String, Object> moduleConfiguration = module.getConfiguration();
+            Configuration moduleConfiguration = module.getConfiguration();
             String typeId = module.getTypeUID();
-            ModuleType mt = mtManager.get(typeId);
-            List<ConfigDescriptionParameter> configs = mt.getConfigurationDescription();
-            if (configs != null) {
-                for (ConfigDescriptionParameter config : configs) {
-                    String defaultValue = config.getDefault();
-                    if (defaultValue != null) {
-                        String configName = config.getName();
-                        if (moduleConfiguration.get(configName) == null) {
-                            moduleConfiguration.put(configName, defaultValue);
+            ModuleType mt = mtRegistry.get(typeId);
+            List<ConfigDescriptionParameter> configDescriptions = mt.getConfigurationDescriptions();
+            if (configDescriptions != null) {
+                for (ConfigDescriptionParameter configDescription : configDescriptions) {
+                    String defaultValue = configDescription.getDefault();
+                    String configName = configDescription.getName();
+                    Object configValue = moduleConfiguration.get(configName);
+                    if (configValue == null) {
+                        if (defaultValue != null) {
+                            moduleConfiguration.put(configName,
+                                    ConfigUtil.normalizeType(defaultValue, configDescription));
                         }
+                    } else {
+                        moduleConfiguration.put(configName, ConfigUtil.normalizeType(configValue, configDescription));
                     }
                 } // for
             }
@@ -1236,10 +1202,9 @@ public class RuleEngine
         return executor;
     }
 
-    @Override
-    public void updated(Dictionary<String, ?> properties) throws ConfigurationException {
-        if (properties != null) {
-            Object value = properties.get(CONFIG_PROPERTY_REINITIALIZATION_DELAY);
+    protected void scheduleRulesConfigurationUpdated(Map<String, Object> config) {
+        if (config != null) {
+            Object value = config.get(CONFIG_PROPERTY_REINITIALIZATION_DELAY);
             if (value != null) {
                 if (value instanceof Number) {
                     scheduleReinitializationDelay = ((Number) value).longValue();
@@ -1268,14 +1233,14 @@ public class RuleEngine
     private void setDefaultConfigurationValues(List<Module> modules) {
         for (Module module : modules) {
             String type = module.getTypeUID();
-            if (mtManager != null) {
-                Map<String, Object> mConfig = module.getConfiguration();
+            if (mtRegistry != null) {
+                Configuration mConfig = module.getConfiguration();
                 if (mConfig == null) {
-                    mConfig = new HashMap<String, Object>(11);
+                    mConfig = new Configuration();
                 }
-                ModuleType mt = mtManager.get(type);
+                ModuleType mt = mtRegistry.get(type);
                 if (mt != null) {
-                    List<ConfigDescriptionParameter> configDescriptions = mt.getConfigurationDescription();
+                    List<ConfigDescriptionParameter> configDescriptions = mt.getConfigurationDescriptions();
                     for (ConfigDescriptionParameter cftDesc : configDescriptions) {
                         String parameterName = cftDesc.getName();
                         if (mConfig.get(parameterName) == null) {
@@ -1340,14 +1305,14 @@ public class RuleEngine
     private void autoMapConnections(RuntimeRule r) {
         Map<Set<String>, OutputRef> triggerOutputTags = new HashMap<Set<String>, OutputRef>(11);
         for (Trigger t : r.getTriggers()) {
-            TriggerType tt = mtManager.get(t.getTypeUID());
+            TriggerType tt = (TriggerType) mtRegistry.get(t.getTypeUID());
             if (tt != null) {
                 initTagsMap(t.getId(), tt.getOutputs(), triggerOutputTags);
             }
         }
         Map<Set<String>, OutputRef> actionOutputTags = new HashMap<Set<String>, OutputRef>(11);
         for (Action a : r.getActions()) {
-            ActionType at = mtManager.get(a.getTypeUID());
+            ActionType at = (ActionType) mtRegistry.get(a.getTypeUID());
             if (at != null) {
                 initTagsMap(a.getId(), at.getOutputs(), actionOutputTags);
             }
@@ -1357,7 +1322,7 @@ public class RuleEngine
         if (!triggerOutputTags.isEmpty()) {
             for (Condition c : r.getConditions()) {
                 boolean isConnectionChanged = false;
-                ConditionType ct = mtManager.get(c.getTypeUID());
+                ConditionType ct = (ConditionType) mtRegistry.get(c.getTypeUID());
                 if (ct != null) {
                     Set<Connection> connections = ((RuntimeCondition) c).getConnections();
 
@@ -1383,7 +1348,7 @@ public class RuleEngine
         if (!triggerOutputTags.isEmpty() || !actionOutputTags.isEmpty()) {
             for (Action a : r.getActions()) {
                 boolean isConnectionChanged = false;
-                ActionType at = mtManager.get(a.getTypeUID());
+                ActionType at = (ActionType) mtRegistry.get(a.getTypeUID());
                 if (at != null) {
                     Set<Connection> connections = ((RuntimeAction) a).getConnections();
                     for (Input input : at.getInputs()) {

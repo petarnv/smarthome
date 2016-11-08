@@ -184,7 +184,8 @@ public class Printer {
         ruleProperty.set(1, getTagsRecord(rule.getTags()));
         ruleContent.add(Utils.getRow(columnWidths, ruleProperty));
 
-        ruleContent.addAll(collectRecords(columnWidths, CONFIGURATION, rule.getConfiguration().entrySet()));
+        ruleContent.addAll(
+                collectRecords(columnWidths, CONFIGURATION, rule.getConfiguration().getProperties().entrySet()));
         ruleContent.addAll(collectRecords(columnWidths, CONFIGURATION_DESCRIPTIONS,
                 getConfigurationDescriptionRecords(rule.getConfigurationDescriptions())));
         ruleContent.addAll(collectRecords(columnWidths, TRIGGERS, rule.getTriggers()));
@@ -231,7 +232,7 @@ public class Printer {
         templateContent.add(Utils.getRow(columnWidths, templateProperty));
         if (template instanceof RuleTemplate) {
             templateContent.addAll(collectRecords(columnWidths, CONFIGURATION_DESCRIPTIONS,
-                    getConfigurationDescriptionRecords(((RuleTemplate) template).getConfigurationDescription())));
+                    getConfigurationDescriptionRecords(((RuleTemplate) template).getConfigurationDescriptions())));
             templateContent.addAll(collectRecords(columnWidths, TRIGGERS, ((RuleTemplate) template).getTriggers()));
             templateContent.addAll(collectRecords(columnWidths, CONDITIONS, ((RuleTemplate) template).getConditions()));
             templateContent.addAll(collectRecords(columnWidths, ACTIONS, ((RuleTemplate) template).getActions()));
@@ -276,7 +277,7 @@ public class Printer {
         moduleTypeContent.add(Utils.getRow(columnWidths, moduleTypeProperty));
 
         moduleTypeContent.addAll(collectRecords(columnWidths, CONFIGURATION_DESCRIPTIONS,
-                getConfigurationDescriptionRecords(moduleType.getConfigurationDescription())));
+                getConfigurationDescriptionRecords(moduleType.getConfigurationDescriptions())));
         if (moduleType instanceof TriggerType) {
             moduleTypeContent.addAll(collectRecords(columnWidths, OUTPUTS, ((TriggerType) moduleType).getOutputs()));
         }
@@ -422,7 +423,8 @@ public class Printer {
         columnValues.set(1, module.getTypeUID());
         moduleContent.add(Utils.getRow(columnWidths, columnValues));
 
-        moduleContent.addAll(collectRecords(columnWidths, CONFIGURATION, module.getConfiguration().entrySet()));
+        moduleContent.addAll(
+                collectRecords(columnWidths, CONFIGURATION, module.getConfiguration().getProperties().entrySet()));
         Map<String, String> inputs = null;
         if (module instanceof Condition) {
             inputs = ((Condition) module).getInputs();

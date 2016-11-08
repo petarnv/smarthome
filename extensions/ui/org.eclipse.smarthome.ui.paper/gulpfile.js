@@ -10,9 +10,9 @@ var angularFilesort = require('gulp-angular-filesort'),
     rename = require("gulp-rename"),
     uglify = require('gulp-uglify'),
     inject = require('gulp-inject'),
-    util = require('gulp-util');
+    util = require('gulp-util'),
+    Server = require('karma').Server;
 var isDevelopment = !!util.env.development;
-
 
 var paths = {
     scripts: [
@@ -32,7 +32,7 @@ var paths = {
         'src': './web-src/js/services*.js',
         'name': 'services.js'
     }, {
-        'src': './web-src/js/controllers*.js',
+        'src': ['./web-src/js/controllers*.js','./web-src/js/widget.multiselect.js'],
         'name': 'controllers.js'
     }, {
         'src': [
@@ -152,7 +152,7 @@ function browserSyncInit(baseDir) {
         index: "index.html"
     };
 
-    server.middleware = proxyMiddleware(['/rest','/icon'], {target: 'http://localhost:8080'});
+    server.middleware = proxyMiddleware(['/rest','/icon','/audio'], {target: 'http://localhost:8080'});
 
     browserSync.instance = browserSync.init({
         startPath: '/',
@@ -188,6 +188,7 @@ gulp.task('inject', ['build'], function () {
                      './web-src/js/app.js',
                      './web-src/js/constants.js',
                      './web-src/js/controllers.configuration.js',
+                     './web-src/js/controllers.system.js',
                      './web-src/js/controllers.items.js',
                      './web-src/js/controllers.control.js',
                      './web-src/js/controllers.extension.js',
@@ -217,4 +218,12 @@ gulp.task('inject', ['build'], function () {
     }))
       .pipe(isDevelopment ? gulp.dest('./web-src'):gulp.dest('./web'));
   });
+
+gulp.task('test',['build'], function (done) {
+    return new Server({
+      configFile: __dirname + '/karma.conf.js',
+      singleRun: true
+    }, done).start();
+  });
+
 

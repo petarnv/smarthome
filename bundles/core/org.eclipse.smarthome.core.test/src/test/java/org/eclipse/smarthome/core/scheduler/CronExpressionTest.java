@@ -1,3 +1,10 @@
+/**
+ * Copyright (c) 2014-2016 by the respective copyright holders.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v1.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v10.html
+ */
 package org.eclipse.smarthome.core.scheduler;
 
 import static org.junit.Assert.assertEquals;
@@ -6,7 +13,6 @@ import java.text.ParseException;
 import java.util.Calendar;
 import java.util.Date;
 
-import org.eclipse.smarthome.core.scheduler.CronExpression;
 import org.junit.Test;
 
 public class CronExpressionTest {
@@ -56,4 +62,22 @@ public class CronExpressionTest {
 
         assertEquals(checkDate, nextDate);
     }
+
+    @Test
+    public void runForever() throws ParseException, InterruptedException {
+
+        final CronExpression expression;
+        expression = new CronExpression("* * * * * ?");
+
+        Date nextDate = expression.getTimeAfter(Calendar.getInstance().getTime());
+        int counter = 1;
+
+        while (nextDate != null && counter <= 150) {
+            System.out.println("value " + counter + " is " + nextDate);
+            nextDate = expression.getTimeAfter(nextDate);
+            counter++;
+        }
+
+    }
+
 }

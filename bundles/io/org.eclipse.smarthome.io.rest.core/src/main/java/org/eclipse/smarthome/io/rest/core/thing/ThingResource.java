@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-2015 openHAB UG (haftungsbeschraenkt) and others.
+ * Copyright (c) 2014-2016 by the respective copyright holders.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -8,11 +8,12 @@
 package org.eclipse.smarthome.io.rest.core.thing;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -62,12 +63,13 @@ import org.eclipse.smarthome.core.thing.dto.ThingDTOMapper;
 import org.eclipse.smarthome.core.thing.link.ItemChannelLink;
 import org.eclipse.smarthome.core.thing.link.ItemChannelLinkRegistry;
 import org.eclipse.smarthome.core.thing.link.ManagedItemChannelLinkProvider;
+import org.eclipse.smarthome.core.thing.type.ChannelKind;
 import org.eclipse.smarthome.core.thing.type.ThingType;
 import org.eclipse.smarthome.core.thing.type.ThingTypeRegistry;
 import org.eclipse.smarthome.core.thing.util.ThingHelper;
 import org.eclipse.smarthome.io.rest.JSONResponse;
 import org.eclipse.smarthome.io.rest.LocaleUtil;
-import org.eclipse.smarthome.io.rest.RESTResource;
+import org.eclipse.smarthome.io.rest.SatisfiableRESTResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -92,7 +94,7 @@ import io.swagger.annotations.ApiResponses;
  */
 @Path(ThingResource.PATH_THINGS)
 @Api(value = ThingResource.PATH_THINGS)
-public class ThingResource implements RESTResource {
+public class ThingResource implements SatisfiableRESTResource {
 
     private final Logger logger = LoggerFactory.getLogger(ThingResource.class);
 
@@ -161,11 +163,14 @@ public class ThingResource implements RESTResource {
                 }
             }
             if (thingBean.channels != null) {
-                Set<Channel> channels = new HashSet<>();
+                List<Channel> channels = new ArrayList<>();
                 for (ChannelDTO channelDTO : thingBean.channels) {
                     channels.add(ChannelDTOMapper.map(channelDTO));
                 }
                 ThingHelper.addChannelsToThing(thing, channels);
+            }
+            if (thingBean.location != null) {
+                thing.setLocation(thingBean.location);
             }
         } else if (thingUID != null) {
             // if there wasn't any ThingFactory capable of creating the thing,
@@ -179,7 +184,7 @@ public class ThingResource implements RESTResource {
         }
 
         thingRegistry.add(thing);
-        return getThingResponse(Status.CREATED, thing, locale, "Thing " + thingUID.toString() + " already exists!");
+        return getThingResponse(Status.CREATED, thing, locale, null);
     }
 
     @GET
@@ -244,6 +249,12 @@ public class ThingResource implements RESTResource {
                     uriInfo.getPath(), channel, thingUID);
             String message = "Channel " + channelId + " for Thing " + thingUID + " does not exist!";
             return JSONResponse.createResponse(Status.NOT_FOUND, null, message);
+        }
+        if (channel.getKind() != ChannelKind.STATE) {
+            logger.info("Tried to link channel '{}' of thing '{}', which is not of kind 'state'", channel, thingUID);
+            String message = "Channel " + channelId + " for Thing " + thingUID
+                    + " is not linkable, as it is not of kind 'state'!";
+            return JSONResponse.createResponse(Status.FORBIDDEN, null, message);
         }
 
         try {
@@ -501,7 +512,7 @@ public class ThingResource implements RESTResource {
      *
      * @param status
      * @param thing
-     * @param errormessage
+     * @param errormessage an optional error message (may be null), ignored if the status family is successful
      * @return Response
      */
     private Response getThingResponse(Status status, Thing thing, Locale locale, String errormessage) {
@@ -587,7 +598,7 @@ public class ThingResource implements RESTResource {
     private Map<String, Set<String>> getLinkedItemsMap(Thing thing) {
         Map<String, Set<String>> linkedItemsMap = new HashMap<>();
         for (Channel channel : thing.getChannels()) {
-            Set<String> linkedItems = itemChannelLinkRegistry.getLinkedItems(channel.getUID());
+            Set<String> linkedItems = itemChannelLinkRegistry.getLinkedItemNames(channel.getUID());
             linkedItemsMap.put(channel.getUID().getId(), linkedItems);
         }
         return linkedItemsMap;
@@ -652,6 +663,15 @@ public class ThingResource implements RESTResource {
         }
 
         return ConfigUtil.normalizeTypes(properties, configDesc);
+    }
+
+    @Override
+    public boolean isSatisfied() {
+        return itemChannelLinkRegistry != null && itemFactory != null && itemRegistry != null
+                && managedItemChannelLinkProvider != null && managedItemProvider != null && managedThingProvider != null
+                && thingRegistry != null && configStatusService != null && configDescRegistry != null
+                && thingTypeRegistry != null;
+
     }
 
 }

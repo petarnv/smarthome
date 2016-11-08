@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-2015 openHAB UG (haftungsbeschraenkt) and others.
+ * Copyright (c) 2014-2016 by the respective copyright holders.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -29,12 +29,15 @@ import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 import javax.ws.rs.core.UriInfo;
 
+import org.eclipse.smarthome.config.core.ConfigDescription;
+import org.eclipse.smarthome.config.core.ConfigDescriptionRegistry;
+import org.eclipse.smarthome.config.core.ConfigUtil;
 import org.eclipse.smarthome.config.core.Configuration;
 import org.eclipse.smarthome.core.binding.BindingInfo;
 import org.eclipse.smarthome.core.binding.BindingInfoRegistry;
 import org.eclipse.smarthome.core.binding.dto.BindingInfoDTO;
 import org.eclipse.smarthome.io.rest.LocaleUtil;
-import org.eclipse.smarthome.io.rest.RESTResource;
+import org.eclipse.smarthome.io.rest.SatisfiableRESTResource;
 import org.eclipse.smarthome.io.rest.core.config.ConfigurationService;
 import org.eclipse.smarthome.io.rest.core.service.ConfigurableServiceResource;
 import org.slf4j.Logger;
@@ -56,7 +59,7 @@ import io.swagger.annotations.ApiResponses;
  */
 @Path(BindingResource.PATH_BINDINGS)
 @Api(value = BindingResource.PATH_BINDINGS)
-public class BindingResource implements RESTResource {
+public class BindingResource implements SatisfiableRESTResource {
 
     /** The URI path to this resource */
     public static final String PATH_BINDINGS = "bindings";
@@ -64,6 +67,7 @@ public class BindingResource implements RESTResource {
     private final Logger logger = LoggerFactory.getLogger(ConfigurableServiceResource.class);
 
     private ConfigurationService configurationService;
+    private ConfigDescriptionRegistry configDescRegistry;
 
     private BindingInfoRegistry bindingInfoRegistry;
 
@@ -136,13 +140,31 @@ public class BindingResource implements RESTResource {
                 return Response.status(404).build();
             }
             Configuration oldConfiguration = configurationService.get(configId);
-            configurationService.update(configId, new Configuration(configuration));
+            configurationService.update(configId, new Configuration(normalizeConfiguration(configuration, bindingId)));
             return oldConfiguration != null ? Response.ok(oldConfiguration.getProperties()).build()
                     : Response.noContent().build();
         } catch (IOException ex) {
             logger.error("Cannot update configuration for service {}: " + ex.getMessage(), bindingId, ex);
             return Response.status(Status.INTERNAL_SERVER_ERROR).build();
         }
+    }
+
+    private Map<String, Object> normalizeConfiguration(Map<String, Object> properties, String bindingId) {
+        if (properties == null || properties.isEmpty()) {
+            return properties;
+        }
+
+        BindingInfo bindingInfo = this.bindingInfoRegistry.getBindingInfo(bindingId);
+        if (bindingInfo == null || bindingInfo.getConfigDescriptionURI() == null) {
+            return properties;
+        }
+
+        ConfigDescription configDesc = configDescRegistry.getConfigDescription(bindingInfo.getConfigDescriptionURI());
+        if (configDesc == null) {
+            return properties;
+        }
+
+        return ConfigUtil.normalizeTypes(properties, configDesc);
     }
 
     private String getConfigId(String bindingId) {
@@ -175,4 +197,18 @@ public class BindingResource implements RESTResource {
     protected void unsetConfigurationService(ConfigurationService configurationService) {
         this.configurationService = null;
     }
+
+    protected void setConfigDescriptionRegistry(ConfigDescriptionRegistry configDescriptionRegistry) {
+        this.configDescRegistry = configDescriptionRegistry;
+    }
+
+    protected void unsetConfigDescriptionRegistry(ConfigDescriptionRegistry configDescriptionRegistry) {
+        this.configDescRegistry = null;
+    }
+
+    @Override
+    public boolean isSatisfied() {
+        return configurationService != null && configDescRegistry != null && bindingInfoRegistry != null;
+    }
+
 }

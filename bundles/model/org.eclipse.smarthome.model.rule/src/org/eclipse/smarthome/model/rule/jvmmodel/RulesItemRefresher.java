@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-2015 openHAB UG (haftungsbeschraenkt) and others.
+ * Copyright (c) 2014-2016 by the respective copyright holders.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -85,7 +85,9 @@ public class RulesItemRefresher implements ItemRegistryChangeListener {
         @Override
         public void run() {
             try {
-                modelRepository.reloadAllModelsOfType("rules");
+                if (modelRepository != null) {
+                    modelRepository.reloadAllModelsOfType("rules");
+                }
             } catch (Exception e) {
                 logger.debug("Exception occurred during execution: {}", e.getMessage(), e);
             }

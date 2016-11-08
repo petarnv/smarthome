@@ -107,7 +107,11 @@ class HostFragmentSupportTest extends OSGiTest{
     void after() {
         logger.info('@After');
     }
-
+    
+    protected void registerVolatileStorageService() {
+        registerService(AutomationIntegrationJsonTest.VOLATILE_STORAGE_SERVICE)
+    }
+    
     @Test
     public void 'asserting that the installation of the host-fragment provides the resources correctly' () {
         logger.info('asserting that the installation of the host-fragment provides the resources correctly')
@@ -223,7 +227,7 @@ class HostFragmentSupportTest extends OSGiTest{
             assertThat moduleTypeRegistry.get(condition2, Locale.getDefault()).getLabel(), is(moduleTypeRegistry.get(condition2).getLabel())
             assertThat moduleTypeRegistry.get(condition2, new Locale("bg")).getLabel(), is(condition2LabelBG)
             assertThat moduleTypeRegistry.get(condition2, Locale.GERMANY).getLabel(), is(condition2LabelDE)
-        }, 3000, 200)
+        }, 10000, 200)
 
         // first uninstall the fragment
         fragment.uninstall()

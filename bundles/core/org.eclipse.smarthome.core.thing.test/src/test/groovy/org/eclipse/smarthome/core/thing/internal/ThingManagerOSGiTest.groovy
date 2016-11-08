@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-2015 openHAB UG (haftungsbeschraenkt) and others.
+ * Copyright (c) 2014-2016 by the respective copyright holders.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -9,24 +9,27 @@ package org.eclipse.smarthome.core.thing.internal
 
 import static org.hamcrest.CoreMatchers.*
 import static org.junit.Assert.*
-import static org.junit.matchers.JUnitMatchers.*
 
+import org.eclipse.smarthome.config.core.BundleProcessor
 import org.eclipse.smarthome.config.core.ConfigDescription
 import org.eclipse.smarthome.config.core.ConfigDescriptionParameter
 import org.eclipse.smarthome.config.core.ConfigDescriptionParameterBuilder
 import org.eclipse.smarthome.config.core.ConfigDescriptionProvider
+import org.eclipse.smarthome.config.core.BundleProcessor.BundleProcessorListener
 import org.eclipse.smarthome.core.common.registry.RegistryChangeListener
 import org.eclipse.smarthome.core.events.Event
 import org.eclipse.smarthome.core.events.EventPublisher
 import org.eclipse.smarthome.core.events.EventSubscriber
 import org.eclipse.smarthome.core.events.TopicEventFilter
+import org.eclipse.smarthome.core.items.Item
+import org.eclipse.smarthome.core.items.ItemRegistry
 import org.eclipse.smarthome.core.items.events.ItemCommandEvent
 import org.eclipse.smarthome.core.items.events.ItemEventFactory
 import org.eclipse.smarthome.core.items.events.ItemStateEvent
+import org.eclipse.smarthome.core.library.items.StringItem
 import org.eclipse.smarthome.core.library.types.DecimalType
 import org.eclipse.smarthome.core.library.types.StringType
 import org.eclipse.smarthome.core.thing.Bridge
-import org.eclipse.smarthome.core.thing.BundleProcessor
 import org.eclipse.smarthome.core.thing.Channel
 import org.eclipse.smarthome.core.thing.ChannelUID
 import org.eclipse.smarthome.core.thing.ManagedThingProvider
@@ -35,9 +38,9 @@ import org.eclipse.smarthome.core.thing.ThingRegistry
 import org.eclipse.smarthome.core.thing.ThingStatus
 import org.eclipse.smarthome.core.thing.ThingStatusDetail
 import org.eclipse.smarthome.core.thing.ThingStatusInfo
+import org.eclipse.smarthome.core.thing.ThingTypeMigrationService
 import org.eclipse.smarthome.core.thing.ThingTypeUID
 import org.eclipse.smarthome.core.thing.ThingUID
-import org.eclipse.smarthome.core.thing.BundleProcessor.BundleProcessorListener
 import org.eclipse.smarthome.core.thing.binding.BaseThingHandler
 import org.eclipse.smarthome.core.thing.binding.BaseThingHandlerFactory
 import org.eclipse.smarthome.core.thing.binding.ThingHandler
@@ -73,6 +76,7 @@ class ThingManagerOSGiTest extends OSGiTest {
 
     ManagedThingProvider managedThingProvider
     ThingLinkManager thingLinkManager
+    ItemRegistry itemRegistry
 
     ManagedItemChannelLinkProvider managedItemChannelLinkProvider
 
@@ -82,20 +86,23 @@ class ThingManagerOSGiTest extends OSGiTest {
 
     def CHANNEL_UID = new ChannelUID(THING_UID, "channel")
 
-    Thing THING = ThingBuilder.create(THING_UID).withChannels([
-        new Channel(CHANNEL_UID, "Switch")
-    ]).build()
+    Thing THING;
 
     EventPublisher eventPublisher
 
     @Before
     void setUp() {
+        THING = ThingBuilder.create(THING_UID).withChannels([
+            new Channel(CHANNEL_UID, "Switch")
+        ]).build()
         registerVolatileStorageService()
         thingLinkManager = getService ThingLinkManager
         thingLinkManager.deactivate()
         managedItemChannelLinkProvider = getService(ManagedItemChannelLinkProvider)
         managedThingProvider = getService(ManagedThingProvider)
         eventPublisher = getService(EventPublisher)
+        itemRegistry = getService(ItemRegistry)
+        assertNotNull(itemRegistry)
     }
 
     @After
@@ -104,6 +111,51 @@ class ThingManagerOSGiTest extends OSGiTest {
             managedThingProvider.remove(it.getUID())
         }
         thingLinkManager.activate(null)
+    }
+
+    @Test
+    void 'ThingManager changes the thing type'() {
+        registerThingTypeProvider()
+
+        def thingHandlerFactory = [
+            supportsThingType: {ThingTypeUID thingTypeUID -> true}
+        ] as ThingHandlerFactory
+
+        registerService(thingHandlerFactory)
+
+        managedThingProvider.add(THING)
+
+        assertThat THING.getThingTypeUID().getAsString(), is(equalTo(THING_TYPE_UID.getAsString()))
+
+        def THING_TYPE_UID_NEW = new ThingTypeUID("binding:type2")
+
+        def migrator = getService(ThingTypeMigrationService.class)
+        assertThat migrator, is(not(null))
+
+        migrator.migrateThingType(THING, THING_TYPE_UID_NEW, THING.getConfiguration())
+
+        waitForAssert {assertThat THING.getThingTypeUID().getAsString(), is(equalTo(THING_TYPE_UID_NEW.getAsString()))}
+    }
+
+    @Test(expected=RuntimeException.class)
+    void 'ThingManager does not change the thing type when new thing type is not registered'() {
+
+        def thingHandlerFactory = [
+            supportsThingType: {ThingTypeUID thingTypeUID -> true}
+        ] as ThingHandlerFactory
+
+        registerService(thingHandlerFactory)
+
+        managedThingProvider.add(THING)
+
+        assertThat THING.getThingTypeUID().getAsString(), is(equalTo(THING_TYPE_UID.getAsString()))
+
+        def THING_TYPE_UID_NEW = new ThingTypeUID("binding:type2")
+
+        def migrator = getService(ThingTypeMigrationService.class)
+        assertThat migrator, is(not(null))
+
+        migrator.migrateThingType(THING, THING_TYPE_UID_NEW, THING.getConfiguration())
     }
 
     @Test
@@ -134,7 +186,7 @@ class ThingManagerOSGiTest extends OSGiTest {
             registerHandler: { Thing thing, ThingHandlerCallback callback ->
                 def thingHandler = [
                     setCallback: {},
-                    getThing: {return THING}
+                    getThing: { return THING }
                 ] as ThingHandler
                 registerService(thingHandler,[
                     (ThingHandler.SERVICE_PROPERTY_THING_ID): THING.getUID(),
@@ -193,7 +245,7 @@ class ThingManagerOSGiTest extends OSGiTest {
 
         // event should not be delivered, because the source is the same
         eventPublisher.post(ItemEventFactory.createStateEvent(itemName, new DecimalType(10), CHANNEL_UID.toString()))
-        waitFor {handleUpdateWasCalled == true}
+        waitFor({handleUpdateWasCalled == true}, 1000)
         assertThat handleUpdateWasCalled, is(false)
     }
 
@@ -204,6 +256,10 @@ class ThingManagerOSGiTest extends OSGiTest {
         def itemName = "name"
         def thingUpdatedWasCalled = false
         def callback;
+
+        // Create item
+        Item item = new StringItem(itemName)
+        itemRegistry.add(item)
 
         managedThingProvider.add(THING)
         managedItemChannelLinkProvider.add(new ItemChannelLink(itemName, CHANNEL_UID))
@@ -266,6 +322,10 @@ class ThingManagerOSGiTest extends OSGiTest {
 
         def itemName = "name"
         def callback;
+
+        // Create item
+        Item item = new StringItem(itemName)
+        itemRegistry.add(item)
 
         managedThingProvider.add(THING)
         managedItemChannelLinkProvider.add(new ItemChannelLink(itemName, CHANNEL_UID))
@@ -404,7 +464,11 @@ class ThingManagerOSGiTest extends OSGiTest {
         managedThingProvider.add(thingB)
 
         def bridgeHandler = [
-            setCallback: {callbackArg -> callback = callbackArg }
+            setCallback: {callbackArg -> callback = callbackArg },
+            getThing: { return bridge },
+            initialize: {},
+            dispose: {
+            }
         ] as ThingHandler
 
         registerService(bridgeHandler,[
@@ -520,6 +584,7 @@ class ThingManagerOSGiTest extends OSGiTest {
         managedItemChannelLinkProvider.add(new ItemChannelLink(itemName, CHANNEL_UID))
         def thingHandler = [
             setCallback: {callbackArg -> callback = callbackArg },
+            getThing: { return THING },
             thingUpdated: {
             }
         ] as ThingHandler
@@ -731,7 +796,7 @@ class ThingManagerOSGiTest extends OSGiTest {
 
         // ThingHandler.initialize() called, thing status is ONLINE.NONE
         waitForAssert({
-        assertThat initializedCalled, is(true)
+            assertThat initializedCalled, is(true)
             assertThat initializedCalled, is(true)
             assertThat thing.getStatusInfo(), is(statusInfo)
         }, 4000)
@@ -766,10 +831,10 @@ class ThingManagerOSGiTest extends OSGiTest {
         registerService(thingHandlerFactory)
 
         boolean finished = false;
+        Bundle bundle = null;
         BundleProcessorListener listener = null;
-        Bundle bundle = ["getSymbolicName": {-> return "test"}] as Bundle;
         def bundleProcessor = [
-            "isFinishedLoading": { object -> if (finished) return null else return bundle },
+            "hasFinishedLoading": { object -> bundle = object; return finished },
             "registerListener": {l -> listener = l},
             "unregisterListener": {l -> listener = null}
         ] as BundleProcessor
@@ -780,14 +845,14 @@ class ThingManagerOSGiTest extends OSGiTest {
 
         managedThingProvider.add(thing)
 
-        statusInfo = ThingStatusInfoBuilder.create(ThingStatus.INITIALIZING, ThingStatusDetail.NONE).build()
         assertThat initializedCalled, is(false)
         assertThat thing.getStatusInfo(), is(statusInfo)
 
         finished = true;
         listener.bundleFinished(bundleProcessor, bundle)
 
-        // ThingHandler.initialize() called, thing status is ONLINE.NONE
+        // ThingHandler.initialize() called, thing status is INITIALIZING.NONE
+        statusInfo = ThingStatusInfoBuilder.create(ThingStatus.INITIALIZING, ThingStatusDetail.NONE).build()
         waitForAssert({
             assertThat initializedCalled, is(true)
             assertThat thing.getStatusInfo(), is(statusInfo)
@@ -841,8 +906,7 @@ class ThingManagerOSGiTest extends OSGiTest {
         def bridgeHandler = [
             setCallback: {callbackArg -> callback = callbackArg },
             initialize: {},
-            dispose: {
-            }
+            dispose: {}
         ] as ThingHandler
         registerService(bridgeHandler,[
             (ThingHandler.SERVICE_PROPERTY_THING_ID): bridge.getUID(),

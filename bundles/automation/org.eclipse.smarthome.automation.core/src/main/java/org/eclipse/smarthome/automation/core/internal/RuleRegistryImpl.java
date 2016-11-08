@@ -8,6 +8,7 @@
 package org.eclipse.smarthome.automation.core.internal;
 
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -23,13 +24,18 @@ import org.eclipse.smarthome.automation.RuleRegistry;
 import org.eclipse.smarthome.automation.RuleStatus;
 import org.eclipse.smarthome.automation.RuleStatusInfo;
 import org.eclipse.smarthome.automation.StatusInfoCallback;
-import org.eclipse.smarthome.automation.core.internal.template.TemplateManager;
+import org.eclipse.smarthome.automation.core.internal.composite.CompositeModuleHandlerFactory;
 import org.eclipse.smarthome.automation.events.RuleEventFactory;
+import org.eclipse.smarthome.automation.handler.ModuleHandlerFactory;
 import org.eclipse.smarthome.automation.template.RuleTemplate;
 import org.eclipse.smarthome.automation.template.Template;
 import org.eclipse.smarthome.automation.template.TemplateProvider;
+import org.eclipse.smarthome.automation.template.TemplateRegistry;
+import org.eclipse.smarthome.automation.type.ModuleTypeProvider;
+import org.eclipse.smarthome.automation.type.ModuleTypeRegistry;
 import org.eclipse.smarthome.config.core.ConfigDescriptionParameter;
 import org.eclipse.smarthome.config.core.ConfigDescriptionParameter.Type;
+import org.eclipse.smarthome.config.core.Configuration;
 import org.eclipse.smarthome.core.common.registry.AbstractRegistry;
 import org.eclipse.smarthome.core.common.registry.ManagedProvider;
 import org.eclipse.smarthome.core.common.registry.Provider;
@@ -37,9 +43,7 @@ import org.eclipse.smarthome.core.events.EventPublisher;
 import org.eclipse.smarthome.core.storage.Storage;
 import org.eclipse.smarthome.core.storage.StorageService;
 import org.osgi.framework.BundleContext;
-import org.osgi.framework.ServiceReference;
-import org.osgi.util.tracker.ServiceTracker;
-import org.osgi.util.tracker.ServiceTrackerCustomizer;
+import org.osgi.service.component.ComponentContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -68,7 +72,7 @@ import org.slf4j.LoggerFactory;
  * <p>
  * The {@link RuleRegistry} manages the status of the Rules:
  * <ul>
- * <li>To check a Rule's status info, use the {@link #getStatus(String)} method.</li>
+ * <li>To check a Rule's status info, use the {@link #getStatusInfo(String)} method.</li>
  * <li>The status of a newly added Rule, or a Rule enabled with {@link #setEnabled(String, boolean)}, or an updated
  * Rule, is first set to {@link RuleStatus#NOT_INITIALIZED}.</li>
  * <li>After a Rule is added or enabled, or updated, a verification procedure is initiated. If the verification of the
@@ -86,76 +90,179 @@ import org.slf4j.LoggerFactory;
  * @author Kai Kreuzer - refactored (managed) provider and registry implementation and other fixes
  * @author Benedikt Niehues - added events for rules
  */
-public class RuleRegistryImpl extends AbstractRegistry<Rule, String>implements RuleRegistry, StatusInfoCallback {
+public class RuleRegistryImpl extends AbstractRegistry<Rule, String, RuleProvider>
+        implements RuleRegistry, StatusInfoCallback {
 
-    private RuleEngine ruleEngine;
-    private Logger logger;
+    private static final String DISABLED_RULE_STORAGE = "automation_rules_disabled";
+    private static final String SOURCE = RuleRegistryImpl.class.getSimpleName();
+    private static final Logger logger = LoggerFactory.getLogger(RuleRegistryImpl.class.getName());
+    private BundleContext bundleContext;
+    private RuleEngine ruleEngine = new RuleEngine();
+    private StorageService storageService;
     private Storage<Boolean> disabledRulesStorage;
-    private TemplateManager templateManager;
+    private ModuleTypeRegistry moduleTypeRegistry;
+    private TemplateRegistry templateRegistry;
 
     /**
      * {@link Map} of template UIDs to rules where these templates participated.
      */
     private Map<String, Set<String>> mapTemplateToRules = new HashMap<String, Set<String>>();
-    @SuppressWarnings("rawtypes")
-    private ServiceTracker templateProviderTracker;
 
-    private static final String SOURCE = RuleRegistryImpl.class.getSimpleName();
-
-    @SuppressWarnings({ "rawtypes", "unchecked" })
-    public RuleRegistryImpl(RuleEngine ruleEngine, TemplateManager tManager, final BundleContext bc) {
-        logger = LoggerFactory.getLogger(getClass());
-        this.ruleEngine = ruleEngine;
-        this.templateManager = tManager;
-        ruleEngine.setStatusInfoCallback(this);
-        templateProviderTracker = new ServiceTracker(bc, TemplateProvider.class.getName(),
-                new ServiceTrackerCustomizer() {
-
-                    @Override
-                    public Object addingService(ServiceReference reference) {
-                        TemplateProvider provider = (TemplateProvider) bc.getService(reference);
-                        templateUpdated(provider.getTemplates(null));
-                        return provider;
-                    }
-
-                    @Override
-                    public void modifiedService(ServiceReference reference, Object service) {
-                        TemplateProvider provider = (TemplateProvider) bc.getService(reference);
-                        templateUpdated(provider.getTemplates(null));
-
-                    }
-
-                    @Override
-                    public void removedService(ServiceReference reference, Object service) {
-                    }
-
-                });
-        templateProviderTracker.open();
-
+    public RuleRegistryImpl() {
+        super(RuleProvider.class);
     }
 
     /**
-     * This method is used to register all {@link Rule}s provided via the {@link RuleProvider}, into the
-     * {@link RuleEngine}.
+     * Activates this component. Called from DS.
      *
-     * @param provider a provider of {@link Rule}s.
-     * @throws RuntimeException
-     *             when passed module has a required configuration property and it is not specified in rule definition
-     *             nor
-     *             in the module's module type definition.
-     * @throws IllegalArgumentException
-     *             when a module id contains dot or when the rule with the same UID already exists.
+     * @param componentContext this component context.
+     * @throws Exception
      */
+    protected void activate(ComponentContext componentContext, Map<String, Object> properties) throws Exception {
+        this.bundleContext = componentContext.getBundleContext();
+        this.ruleEngine.setModuleTypeRegistry(moduleTypeRegistry);
+        this.ruleEngine.setCompositeModuleHandlerFactory(
+                new CompositeModuleHandlerFactory(bundleContext, moduleTypeRegistry, ruleEngine));
+        this.ruleEngine.setStatusInfoCallback(this);
+        modified(properties);
+        super.activate(bundleContext);
+    }
+
+    protected void modified(Map<String, Object> config) {
+        ruleEngine.scheduleRulesConfigurationUpdated(config);
+    }
+
+    /**
+     * Deactivates this component. Called from DS.
+     *
+     * @param componentContext this component context.
+     */
+    protected void deactivate(ComponentContext componentContext) {
+        super.deactivate();
+        ruleEngine.dispose();
+        ruleEngine = null;
+    }
+
+    /**
+     * Bind the {@link ModuleTypeRegistry} service - called from DS.
+     *
+     * @param moduleTypeRegistry moduleTypeRegistry service.
+     */
+    protected void setModuleTypeRegistry(ModuleTypeRegistry moduleTypeRegistry) {
+        this.moduleTypeRegistry = moduleTypeRegistry;
+    }
+
+    /**
+     * Unbind the {@link ModuleTypeRegistry} service - called from DS.
+     *
+     * @param moduleTypeRegistry moduleTypeRegistry service.
+     */
+    protected void unsetModuleTypeRegistry(ModuleTypeRegistry moduleTypeRegistry) {
+        this.moduleTypeRegistry = null;
+    }
+
+    /**
+     * Bind the {@link TemplateRegistry} service - called from DS.
+     *
+     * @param templateRegistry templateRegistry service.
+     */
+    protected void setTemplateRegistry(TemplateRegistry templateRegistry) {
+        this.templateRegistry = templateRegistry;
+    }
+
+    /**
+     * Unbind the {@link TemplateRegistry} service - called from DS.
+     *
+     * @param templateRegistry templateRegistry service.
+     */
+    protected void unsetTemplateRegistry(TemplateRegistry templateRegistry) {
+        this.templateRegistry = null;
+    }
+
+    protected void setStorageService(StorageService storageService) {
+        this.storageService = storageService;
+        setDisabledRuleStorage(
+                storageService.<Boolean>getStorage(DISABLED_RULE_STORAGE, this.getClass().getClassLoader()));
+    }
+
+    private void setDisabledRuleStorage(Storage<Boolean> disabledRulesStorage) {
+        this.disabledRulesStorage = disabledRulesStorage;
+        initializeDisabledRules();
+    }
+
+    private void initializeDisabledRules() {
+        for (Rule rule : ruleEngine.getRules()) {
+            String uid = rule.getUID();
+            if (disabledRulesStorage.get(uid) == null) {
+                setEnabled(uid, Boolean.TRUE);
+            }
+        }
+    }
+
+    /**
+     * Unbind the {@link StorageService} - called from DS.
+     *
+     * @param storageService
+     */
+    protected void unsetStorageService(StorageService storageService) {
+        this.storageService = null;
+        unsetDisabledRuleStorage();
+    }
+
+    private void unsetDisabledRuleStorage() {
+        this.disabledRulesStorage = null;
+        for (Rule rule : ruleEngine.getRules()) {
+            String uid = rule.getUID();
+            ruleEngine.setRuleEnabled(uid, Boolean.FALSE);
+        }
+    }
+
+    /**
+     *
+     * @param templateProvider
+     */
+    protected void addTemplateProvider(TemplateProvider templateProvider) {
+        templateUpdated(templateProvider.getTemplates(null));
+    }
+
+    protected void updatedTemplateProvider(TemplateProvider templateProvider) {
+        templateUpdated(templateProvider.getTemplates(null));
+    }
+
+    protected void addModuleTypeProvider(ModuleTypeProvider moduleTypeProvider) {
+        ruleEngine.addModuleTypeProvider(moduleTypeProvider);
+    }
+
+    protected void updatedModuleTypeProvider(ModuleTypeProvider moduleTypeProvider) {
+        ruleEngine.updatedModuleTypeProvider(moduleTypeProvider);
+    }
+
+    protected void addModuleHandlerFactory(ModuleHandlerFactory moduleHandlerFactory) {
+        ruleEngine.addModuleHandlerFactory(moduleHandlerFactory);
+    }
+
+    protected void updatedModuleHandlerFactory(ModuleHandlerFactory moduleHandlerFactory) {
+        ruleEngine.updatedModuleHandlerFactory(moduleHandlerFactory);
+    }
+
+    protected void removeModuleHandlerFactory(ModuleHandlerFactory moduleHandlerFactory) {
+        ruleEngine.removeModuleHandlerFactory(moduleHandlerFactory);
+    }
+
+    @Override
+    protected void setEventPublisher(EventPublisher eventPublisher) {
+        super.setEventPublisher(eventPublisher);
+    }
+
+    @Override
+    protected void unsetEventPublisher(EventPublisher eventPublisher) {
+        super.unsetEventPublisher(eventPublisher);
+    }
+
     @Override
     protected void addProvider(Provider<Rule> provider) {
         logger.info("Rule provider: {} is added.", provider);
         super.addProvider(provider);
-    }
-
-    @Override
-    protected void setManagedProvider(ManagedProvider<Rule, String> provider) {
-        super.setManagedProvider(provider);
-        logger.info("Rule Managed Provider: {} is added.", provider);
     }
 
     @Override
@@ -165,9 +272,15 @@ public class RuleRegistryImpl extends AbstractRegistry<Rule, String>implements R
     }
 
     @Override
-    protected void removeManagedProvider(ManagedProvider<Rule, String> provider) {
-        super.removeManagedProvider(provider);
-        logger.info("Rule Managed provider: {} is removed.", provider);
+    protected void setManagedProvider(ManagedProvider<Rule, String> managedProvider) {
+        logger.info("Rule Managed Provider: {} is added.", managedProvider);
+        super.setManagedProvider(managedProvider);
+    }
+
+    @Override
+    protected void removeManagedProvider(ManagedProvider<Rule, String> managedProvider) {
+        logger.info("Rule Managed provider: {} is removed.", managedProvider);
+        super.removeManagedProvider(managedProvider);
     }
 
     /**
@@ -196,6 +309,7 @@ public class RuleRegistryImpl extends AbstractRegistry<Rule, String>implements R
         Rule r1 = resolveTemplate(ruleWithUID); // the resolved rule must be store in managed provider
         if (r1 != null) {
             super.add(r1);
+            ruleWithUID = r1;
         } else {
             // template is not available
             super.add(ruleWithUID);
@@ -222,28 +336,44 @@ public class RuleRegistryImpl extends AbstractRegistry<Rule, String>implements R
     protected void onAddElement(Rule r) throws IllegalArgumentException {
         Rule rule = resolveTemplate(r); // can be called from any provider.
         try {
-            postEvent(RuleEventFactory.createRuleAddedEvent(rule, SOURCE));
+            postRuleAddedEvent(rule);
             String rUID = rule.getUID();
-            if (rUID != null && disabledRulesStorage != null && disabledRulesStorage.get(rUID) != null) {
-                ruleEngine.addRule(rule, false);
+            if (disabledRulesStorage != null) {
+                if (rUID != null && disabledRulesStorage.get(rUID) != null) {
+                    ruleEngine.addRule(rule, false);
+                } else {
+                    ruleEngine.addRule(rule, true);
+                }
             } else {
-                ruleEngine.addRule(rule, true);
+                ruleEngine.addRule(rule, false);
             }
             super.onAddElement(rule);
-
         } catch (Exception e) {
             logger.error("Can't add rule: {}", rule.getUID(), e);
         }
+    }
+
+    protected void postRuleAddedEvent(Rule rule) {
+        postEvent(RuleEventFactory.createRuleAddedEvent(rule, SOURCE));
+    }
+
+    protected void postRuleRemovedEvent(Rule rule) {
+        postEvent(RuleEventFactory.createRuleRemovedEvent(rule, SOURCE));
+    }
+
+    protected void postRuleUpdatedEvent(Rule rule, Rule oldRule) {
+        postEvent(RuleEventFactory.createRuleUpdatedEvent(rule, oldRule, SOURCE));
+    }
+
+    protected void postRuleStatusInfoEvent(RuleStatusInfo statusInfo, String ruleUID) {
+        postEvent(RuleEventFactory.createRuleStatusInfoEvent(statusInfo, ruleUID, SOURCE));
     }
 
     @Override
     protected void onRemoveElement(Rule rule) {
         String uid = rule.getUID();
         if (ruleEngine.removeRule(uid)) {
-            postEvent(RuleEventFactory.createRuleRemovedEvent(rule, SOURCE));
-        }
-        if (disabledRulesStorage != null) {
-            disabledRulesStorage.remove(uid);
+            postRuleRemovedEvent(rule);
         }
 
         if (rule.getTemplateUID() != null) {
@@ -282,7 +412,7 @@ public class RuleRegistryImpl extends AbstractRegistry<Rule, String>implements R
      */
     @Override
     protected void onUpdateElement(Rule oldElement, Rule element) throws IllegalArgumentException {
-        postEvent(RuleEventFactory.createRuleUpdatedEvent(element, oldElement, SOURCE));
+        postRuleUpdatedEvent(element, oldElement);
         String rUID = element.getUID();
         if (disabledRulesStorage != null && disabledRulesStorage.get(rUID) != null) {
             ruleEngine.setRuleEnabled(rUID, false);
@@ -301,52 +431,43 @@ public class RuleRegistryImpl extends AbstractRegistry<Rule, String>implements R
     }
 
     @Override
-    public Collection<Rule> getByTags(Set<String> tags) {
-        return ruleEngine.getRulesByTags(tags);
+    public Collection<Rule> getByTags(String... tags) {
+        Set<String> tagSet = tags != null ? new HashSet<String>(Arrays.asList(tags)) : null;
+        return ruleEngine.getRulesByTags(tagSet);
     }
 
     @Override
     public synchronized void setEnabled(String uid, boolean isEnabled) {
-        ruleEngine.setRuleEnabled(uid, isEnabled);
         if (disabledRulesStorage != null) {
-            if (isEnabled) {
-                disabledRulesStorage.remove(uid);
+            if (ruleEngine.hasRule(uid)) {
+                ruleEngine.setRuleEnabled(uid, isEnabled);
+                if (isEnabled) {
+                    disabledRulesStorage.remove(uid);
+                } else {
+                    disabledRulesStorage.put(uid, isEnabled);
+                }
             } else {
-                disabledRulesStorage.put(uid, isEnabled);
+                throw new IllegalArgumentException(String.format("No rule with such id={} was found!", uid));
             }
+        } else {
+            throw new IllegalStateException("Persisting rule state failed. Storage service is not available!");
         }
     }
 
     @Override
-    public RuleStatusInfo getStatus(String ruleUID) {
+    public RuleStatusInfo getStatusInfo(String ruleUID) {
         return ruleEngine.getRuleStatusInfo(ruleUID);
     }
 
-    protected void setDisabledRuleStorage(Storage<Boolean> disabledRulesStorage) {
-        this.disabledRulesStorage = disabledRulesStorage;
-        for (Rule rule : ruleEngine.getRules()) {
-            String uid = rule.getUID();
-            if (ruleEngine.getRuleStatus(uid).equals(RuleStatus.DISABLED)) {
-                disabledRulesStorage.put(uid, false);
-            } else {
-                disabledRulesStorage.remove(uid);
-            }
-        }
-    }
-
     @Override
-    public void setEventPublisher(EventPublisher eventPublisher) {
-        super.setEventPublisher(eventPublisher);
-    }
-
-    @Override
-    public void unsetEventPublisher(EventPublisher eventPublisher) {
-        super.unsetEventPublisher(eventPublisher);
+    public RuleStatus getStatus(String ruleUID) {
+        RuleStatusInfo statusInfo = getStatusInfo(ruleUID);
+        return statusInfo != null ? statusInfo.getStatus() : null;
     }
 
     @Override
     public void statusInfoChanged(String ruleUID, RuleStatusInfo statusInfo) {
-        postEvent(RuleEventFactory.createRuleStatusInfoEvent(statusInfo, ruleUID, SOURCE));
+        postRuleStatusInfoEvent(statusInfo, ruleUID);
     }
 
     @Override
@@ -355,13 +476,6 @@ public class RuleRegistryImpl extends AbstractRegistry<Rule, String>implements R
             return Boolean.FALSE;
         }
         return ruleEngine.hasRule(ruleUID) ? !ruleEngine.getRuleStatus(ruleUID).equals(RuleStatus.DISABLED) : null;
-    }
-
-    public void dispose() {
-        if (templateProviderTracker != null) {
-            templateProviderTracker.close();
-            templateProviderTracker = null;
-        }
     }
 
     /**
@@ -401,19 +515,19 @@ public class RuleRegistryImpl extends AbstractRegistry<Rule, String>implements R
      */
     private Rule getRuleByTemplate(Rule rule) {
         String ruleTemplateUID = rule.getTemplateUID();
-        RuleTemplate template = (RuleTemplate) templateManager.get(ruleTemplateUID);
+        RuleTemplate template = (RuleTemplate) templateRegistry.get(ruleTemplateUID);
         if (template == null) {
             logger.debug("Rule template {} does not exist.", ruleTemplateUID);
             return null;
         } else {
             Rule r1 = new Rule(rule.getUID(), RuleUtils.getTriggersCopy(template.getTriggers()),
                     RuleUtils.getConditionsCopy(template.getConditions()),
-                    RuleUtils.getActionsCopy(template.getActions()), template.getConfigurationDescription(),
-                    rule.getConfiguration(), template.getUID(), template.getVisibility());
+                    RuleUtils.getActionsCopy(template.getActions()), template.getConfigurationDescriptions(),
+                    rule.getConfiguration(), null, rule.getVisibility());
             validateConfiguration(r1);
             r1.setName(rule.getName());
-            r1.setTags(template.getTags());
-            r1.setDescription(template.getDescription());
+            r1.setTags(rule.getTags());
+            r1.setDescription(rule.getDescription());
 
             return r1;
         }
@@ -428,7 +542,7 @@ public class RuleRegistryImpl extends AbstractRegistry<Rule, String>implements R
             }
             if (rules != null) {
                 for (String rUID : rules) {
-                    RuleStatus ruleStatus = getStatus(rUID).getStatus();
+                    RuleStatus ruleStatus = getStatusInfo(rUID).getStatus();
                     if (ruleStatus == RuleStatus.NOT_INITIALIZED) {
                         Rule oldRule, newRule;
                         if ((oldRule = managedProvider.get(rUID)) != null) {
@@ -447,9 +561,10 @@ public class RuleRegistryImpl extends AbstractRegistry<Rule, String>implements R
         }
     }
 
-    private void validateConfiguration(Rule r) {
+    protected void validateConfiguration(Rule r) {
         List<ConfigDescriptionParameter> configDescriptions = r.getConfigurationDescriptions();
-        Map<String, ?> configuration = r.getConfiguration();
+        Configuration moduleConfiguration = r.getConfiguration();
+        Map<String, Object> configuration = moduleConfiguration.getProperties();
         if (configuration != null) {
             validateConfiguration(configDescriptions, new HashMap<String, Object>(configuration));
             handleModuleConfigReferences(r.getTriggers(), configuration);

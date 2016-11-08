@@ -6,7 +6,10 @@ angular.module('PaperUI.services', [ 'PaperUI.constants' ]).config(function($htt
     $httpProvider.interceptors.push(function($q, $injector) {
         return {
             'responseError' : function(rejection) {
-                $injector.get('toastService').showErrorToast('ERROR: ' + rejection.status + ' - ' + rejection.statusText);
+                var showError = rejection.showError;
+                if (showError !== false) {
+                    $injector.get('toastService').showErrorToast('ERROR: ' + rejection.status + ' - ' + rejection.statusText);
+                }
                 return $q.reject(rejection);
             }
         };
@@ -31,13 +34,16 @@ angular.module('PaperUI.services', [ 'PaperUI.constants' ]).config(function($htt
             var data = JSON.parse(event.data);
             $log.debug('Event received: ' + data.topic + ' - ' + data.payload);
             $.each(callbacks, function(index, element) {
-                if (data.topic.match(element.topic)) {
+                var match = data.topic.match(element.topic);
+                if (match != null && match == data.topic) {
                     element.callback(data.topic, JSON.parse(data.payload));
                 }
             });
         });
     }
-    initializeEventService();
+    if (typeof (EventSource) !== "undefined") {
+        initializeEventService();
+    }
 
     return new function() {
         this.onEvent = function(topic, callback) {
@@ -92,7 +98,7 @@ angular.module('PaperUI.services', [ 'PaperUI.constants' ]).config(function($htt
             for (var j = 0; j < configGroups.length; j++) {
                 indexArray[configGroups[j].name] = j;
             }
-            if (!configParameters) {
+            if (!configParameters || configParameters.length == 0) {
                 return parameters;
             }
             var groupsList = [];
@@ -111,41 +117,72 @@ angular.module('PaperUI.services', [ 'PaperUI.constants' ]).config(function($htt
                 group = $filter('filter')(configGroups, {
                     name : parameter.groupName
                 }, true);
-
+                if (group.length == 0) {
+                    group = $filter('filter')(configGroups, {
+                        name : "_default"
+                    }, true);
+                }
+                parameter.locale = window.localStorage.getItem('paperui.language');
                 if (parameter.context) {
                     if (parameter.context.toUpperCase() === 'ITEM') {
                         parameter.element = 'select';
                     } else if (parameter.context.toUpperCase() === 'DATE') {
-                        parameter.element = 'date';
+                        if (parameter.type.toUpperCase() === 'TEXT') {
+                            parameter.element = 'date';
+                        } else {
+                            parameter.element = 'input';
+                            parameter.context = "";
+                        }
                     } else if (parameter.context.toUpperCase() === 'THING') {
                         parameter.element = 'select';
                         thingList = thingList === undefined ? thingService.getAll() : thingList;
                         parameter.options = thingList;
-                    } else if (parameter.context.toUpperCase() === 'COLOR' || parameter.context.toUpperCase() === 'TIME') {
+                    } else if (parameter.context.toUpperCase() === 'TIME') {
                         parameter.element = 'input';
+                        if (parameter.type.toUpperCase() === 'TEXT') {
+                            parameter.inputType = parameter.context;
+                        } else {
+                            parameter.context = "";
+                        }
+                    } else if (parameter.context.toUpperCase() === 'COLOR') {
+                        parameter.element = 'color';
                         parameter.input = "TEXT";
                         parameter.inputType = parameter.context;
                     } else if (parameter.context.toUpperCase() === 'SCRIPT') {
                         parameter.element = 'textarea';
                         parameter.inputType = 'text';
                         parameter.label = parameter.label && parameter.label.length > 0 ? parameter.label : 'Script';
+                    } else if (parameter.context.toUpperCase() === 'DAYOFWEEK') {
+                        parameter.element = 'dayofweek';
+                        parameter.inputType = 'text';
+                    } else if (parameter.context.toUpperCase() === 'PASSWORD') {
+                        parameter.element = 'input';
+                        parameter.inputType = 'password';
                     } else {
                         parameter.element = 'input';
                         parameter.inputType = 'text';
                     }
                 } else if (parameter.type.toUpperCase() === 'TEXT') {
                     if (parameter.options && parameter.options.length > 0) {
-                        parameter.element = 'select';
+                        if (parameter.multiple) {
+                            parameter.element = 'multiSelect';
+                        } else {
+                            parameter.element = "select";
+                        }
                         parameter.options = parameter.options;
                     } else {
                         parameter.element = 'input';
-                        parameter.inputType = parameter.context === 'password' ? 'password' : 'text';
+                        parameter.inputType = 'text';
                     }
                 } else if (parameter.type.toUpperCase() === 'BOOLEAN') {
                     parameter.element = 'switch';
                 } else if (parameter.type.toUpperCase() === 'INTEGER' || parameter.type.toUpperCase() === 'DECIMAL') {
                     if (parameter.options && parameter.options.length > 0) {
-                        parameter.element = 'select';
+                        if (parameter.multiple) {
+                            parameter.element = 'multiSelect';
+                        } else {
+                            parameter.element = "select";
+                        }
                         for (var k = 0; k < parameter.options.length; k++) {
                             parameter.options[k].value = parseInt(parameter.options[k].value);
                         }
@@ -164,22 +201,40 @@ angular.module('PaperUI.services', [ 'PaperUI.constants' ]).config(function($htt
                 groupsList[indexArray[group[0].name]].groupLabel = group[0].label;
                 groupsList[indexArray[group[0].name]].parameters.push(parameter);
             }
+            parameters.hasAdvanced = false;
             for (var j = 0; j < groupsList.length; j++) {
                 if (groupsList[j].groupName) {
+                    groupsList[j].advParam = $.grep(groupsList[j].parameters, function(parameter) {
+                        return parameter.advanced;
+                    }).length;
+                    if (groupsList[j].advParam > 0) {
+                        parameters.hasAdvanced = true;
+                    }
                     parameters.push(groupsList[j]);
                 }
+
             }
             return this.getItemConfigs(parameters);
         },
-        getItemConfigs : function(configParameters) {
-            var self = this;
-            var parameterItems = $.grep(configParameters[0].parameters, function(value) {
-                return value.context && value.context.toUpperCase() == "ITEM";
-            });
-            if (parameterItems.length > 0) {
+        getItemConfigs : function(configParams) {
+            var self = this, hasOneItem = false;
+            configParameters = configParams;
+            for (var i = 0; !hasOneItem && i < configParameters.length; i++) {
+                var parameterItems = $.grep(configParameters[i].parameters, function(value) {
+                    return value.context && value.context.toUpperCase() == "ITEM";
+                });
+                if (parameterItems.length > 0) {
+                    hasOneItem = true;
+                }
+            }
+            if (hasOneItem) {
                 itemRepository.getAll(function(items) {
-                    for (var i = 0; i < parameterItems.length; i++) {
-                        parameterItems[i].options = self.filterByAttributes(items, parameterItems[i].filterCriteria);
+                    for (var g_i = 0; g_i < configParameters.length; g_i++) {
+                        for (var i = 0; i < configParameters[g_i].parameters.length; i++) {
+                            if (configParameters[g_i].parameters[i].context && configParameters[g_i].parameters[i].context.toUpperCase() === "ITEM") {
+                                configParameters[g_i].parameters[i].options = self.filterByAttributes(items, configParameters[g_i].parameters[i].filterCriteria);
+                            }
+                        }
                     }
                 });
             }
@@ -219,9 +274,9 @@ angular.module('PaperUI.services', [ 'PaperUI.constants' ]).config(function($htt
                     var date = Date.parse(value);
                     if (param !== null && param.context && !isNaN(date)) {
                         if (param.context.toUpperCase() === 'TIME') {
-                            value = value.getHours() + ':' + value.getMinutes() + ':' + value.getSeconds();
+                            value = (value.getHours() < 10 ? '0' : '') + value.getHours() + ':' + (value.getMinutes() < 10 ? '0' : '') + value.getMinutes();
                         } else if (param.context.toUpperCase() === 'DATE') {
-                            value = (value.getFullYear() + '-' + (value.getMonth() + 1) + '-' + value.getDate());
+                            value = (value.getFullYear() + '-' + (value.getMonth() < 10 ? '0' : '') + (value.getMonth() + 1) + '-' + value.getDate());
                         }
                     }
                 }
@@ -232,7 +287,7 @@ angular.module('PaperUI.services', [ 'PaperUI.constants' ]).config(function($htt
             });
             return configArray;
         },
-        getConfigAsObject : function(configArray, paramGroups) {
+        getConfigAsObject : function(configArray, paramGroups, sending) {
             var config = {};
 
             for (var i = 0; configArray && i < configArray.length; i++) {
@@ -244,14 +299,12 @@ angular.module('PaperUI.services', [ 'PaperUI.constants' ]).config(function($htt
                     if (param.context.toUpperCase() === 'TIME') {
                         var time = configEntry.value ? configEntry.value.split(/[\s\/,.:-]+/) : [];
                         if (time.length > 1) {
-                            configEntry.value = new Date(1970, 0, 1, time[0], time[1], time.length > 2 ? time[2] : 0);
-                        } else {
-                            configEntry.value = null;
+                            configEntry.value = new Date(1970, 0, 1, time[0], time[1]);
                         }
                     } else if (param.context.toUpperCase() === 'DATE') {
                         var dateParts = configEntry.value ? configEntry.value.split(/[\s\/,.:-]+/) : [];
                         if (dateParts.length > 2) {
-                            configEntry.value = new Date(dateParts[1] + '.' + dateParts[2] + '.' + dateParts[0]);
+                            configEntry.value = new Date(dateParts[1] + '/' + dateParts[2] + '/' + dateParts[0]);
                         } else {
                             configEntry.value = null;
                         }
@@ -283,7 +336,7 @@ angular.module('PaperUI.services', [ 'PaperUI.constants' ]).config(function($htt
                                 thing.configuration[parameter.name] = String(value).toUpperCase() == "TRUE";
                             }
                         } else if (parameter.type === 'INTEGER' || parameter.type === 'DECIMAL') {
-                            thing.configuration[parameter.name] = parseInt(parameter.defaultValue);
+                            thing.configuration[parameter.name] = parameter.defaultValue != null && parameter.defaultValue !== "" ? parseInt(parameter.defaultValue) : "";
                         } else {
                             thing.configuration[parameter.name] = parameter.defaultValue;
                         }
@@ -304,22 +357,20 @@ angular.module('PaperUI.services', [ 'PaperUI.constants' ]).config(function($htt
                         if (date) {
                             if (typeof sending !== "undefined" && sending) {
                                 if (parameter.context.toUpperCase() === 'DATE') {
-                                    configuration[parameter.name] = date instanceof Date ? (date.getFullYear() + '-' + (date.getMonth() + 1) + '-' + date.getDate()) : date;
+                                    configuration[parameter.name] = date instanceof Date ? (date.getFullYear() + '-' + (date.getMonth() < 10 ? '0' : '') + (date.getMonth() + 1) + '-' + date.getDate()) : date;
                                 } else {
-                                    configuration[parameter.name] = date instanceof Date ? date.getHours() + ':' + date.getMinutes() + ':' + date.getSeconds() : date;
+                                    configuration[parameter.name] = date instanceof Date ? (date.getHours() < 10 ? '0' : '') + date.getHours() + ':' + (date.getMinutes() < 10 ? '0' : '') + date.getMinutes() : date;
                                 }
                             } else {
                                 if (parameter.context.toUpperCase() === 'TIME') {
                                     var time = date.split(/[\s\/,.:-]+/);
                                     if (time.length > 1) {
-                                        configuration[parameter.name] = new Date(1970, 0, 1, time[0], time[1], time.length > 2 ? time[2] : 0);
-                                    } else {
-                                        configuration[parameter.name] = null;
+                                        configuration[parameter.name] = new Date(1970, 0, 1, time[0], time[1]);
                                     }
                                 } else {
                                     var dateParts = date.split(/[\s\/,.:-]+/);
                                     if (dateParts.length > 2) {
-                                        configuration[parameter.name] = new Date(dateParts[1] + '-' + dateParts[2] + '-' + dateParts[0]);
+                                        configuration[parameter.name] = new Date(dateParts[1] + '/' + dateParts[2] + '/' + dateParts[0]);
                                     } else {
                                         configuration[parameter.name] = null;
                                     }
@@ -327,23 +378,23 @@ angular.module('PaperUI.services', [ 'PaperUI.constants' ]).config(function($htt
                             }
                         }
 
-                    } else if (parameter.context && (parameter.context.toUpperCase() === 'COLOR')) {
-                        configuration[parameter.name] = "#ffffff";
+                    } else if (!hasValue && parameter.context && (parameter.context.toUpperCase() === 'COLOR' && !sending)) {
+                        // configuration[parameter.name] = "#ffffff";
                     } else if (!hasValue && parameter.type === 'TEXT') {
-                        configuration[parameter.name] = parameter.defaultValue
+                        configuration[parameter.name] = parameter.defaultValue;
                     } else if (parameter.type === 'BOOLEAN') {
                         var value = hasValue ? configuration[parameter.name] : parameter.defaultValue;
                         if (String(value).length > 0) {
                             configuration[parameter.name] = String(value).toUpperCase() == "TRUE";
                         }
-                    } else if (!hasValue && parameter.type === 'INTEGER' || parameter.type === 'DECIMAL') {
-                        configuration[parameter.name] = parseInt(parameter.defaultValue);
+                    } else if (!hasValue && (parameter.type === 'INTEGER' || parameter.type === 'DECIMAL')) {
+                        configuration[parameter.name] = parameter.defaultValue != null && parameter.defaultValue !== "" ? parseInt(parameter.defaultValue) : null;
                     } else if (!hasValue) {
                         configuration[parameter.name] = parameter.defaultValue;
                     }
                 });
             }
-            return configuration;
+            return this.replaceEmptyValues(configuration);
         },
         convertValues : function(configurations, parameters) {
             angular.forEach(configurations, function(value, name) {
@@ -401,6 +452,7 @@ angular.module('PaperUI.services', [ 'PaperUI.constants' ]).config(function($htt
                 thingChannels.push(group);
             }
 
+            thingChannels = this.addTypeToChannels(thingChannels, channelTypes);
             return thingChannels;
         },
 
@@ -477,6 +529,14 @@ angular.module('PaperUI.services', [ 'PaperUI.constants' ]).config(function($htt
                 }
             }
             return matched;
+        },
+        addTypeToChannels : function(groups, channelTypes) {
+            for (var g_i = 0; g_i < groups.length; g_i++) {
+                for (var c_i = 0; c_i < groups[g_i].channels.length; c_i++) {
+                    groups[g_i].channels[c_i].channelType = this.getChannelFromChannelTypes(channelTypes, groups[g_i].channels[c_i].channelTypeUID);
+                }
+            }
+            return groups;
         }
     }
 }).factory('util', function() {

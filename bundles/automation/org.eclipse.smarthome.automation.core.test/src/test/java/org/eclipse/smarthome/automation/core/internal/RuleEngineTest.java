@@ -23,6 +23,7 @@ import org.eclipse.smarthome.automation.Trigger;
 import org.eclipse.smarthome.config.core.ConfigDescriptionParameter;
 import org.eclipse.smarthome.config.core.ConfigDescriptionParameter.Type;
 import org.eclipse.smarthome.config.core.ConfigDescriptionParameterBuilder;
+import org.eclipse.smarthome.config.core.Configuration;
 import org.eclipse.smarthome.config.core.FilterCriteria;
 import org.eclipse.smarthome.config.core.ParameterOption;
 import org.junit.Assert;
@@ -41,14 +42,14 @@ public class RuleEngineTest {
     Logger log = LoggerFactory.getLogger(RuleEngineTest.class);
 
     private RuleEngine createRuleEngine() {
-        BundleContextMockup bc = new BundleContextMockup();
-        RuleEngine ruleEngine = new RuleEngine(bc);
-        ruleEngine.setModuleTypeManager(new ModuleTypeManagerMockup(bc, ruleEngine));
+        RuleEngine ruleEngine = new RuleEngine();
+        ruleEngine.setModuleTypeRegistry(new ModuleTypeRegistryMockup());
         return ruleEngine;
     }
 
     /**
      * test adding and retrieving rules
+     *
      */
     @Test
     public void testAddRetrieveRules() {
@@ -70,6 +71,7 @@ public class RuleEngineTest {
 
     /**
      * test auto map connections of the rule
+     *
      */
     @Test
     public void testAutoMapRuleConnections() {
@@ -118,6 +120,7 @@ public class RuleEngineTest {
 
     /**
      * test editing rule tags
+     *
      */
     @Test
     public void testRuleTags() {
@@ -149,6 +152,7 @@ public class RuleEngineTest {
 
     /**
      * test get rules by tags
+     *
      */
     @Test
     public void testGetRuleByTags() {
@@ -182,6 +186,7 @@ public class RuleEngineTest {
 
     /**
      * test rule configurations with null
+     *
      */
     @Test
     public void testRuleConfigNull() {
@@ -198,13 +203,14 @@ public class RuleEngineTest {
 
     /**
      * test rule configurations with real values
+     *
      */
     @Test
     public void testRuleConfigValue() {
         RuleEngine ruleEngine = createRuleEngine();
 
         List<ConfigDescriptionParameter> configDescriptions = createConfigDescriptions();
-        Map<String, Object> configurations = new HashMap<String, Object>();
+        Configuration configurations = new Configuration();
         configurations.put("config1", 5);
 
         Rule rule4 = new Rule("rule4");
@@ -215,7 +221,7 @@ public class RuleEngineTest {
         rule4.setConfiguration(configurations);
         ruleEngine.addRule(rule4, true);
         Rule rule4Get = ruleEngine.getRule("rule4");
-        Map<String, ?> rule4cfg = rule4Get.getConfiguration();
+        Configuration rule4cfg = rule4Get.getConfiguration();
         List<ConfigDescriptionParameter> rule4cfgD = rule4Get.getConfigurationDescriptions();
         Assert.assertNotNull("Rule configuration is null", rule4cfg);
         Assert.assertTrue("Missing config property in rule copy", rule4cfg.containsKey("config1"));
@@ -234,6 +240,7 @@ public class RuleEngineTest {
 
     /**
      * test rule actions
+     *
      */
     @Test
     public void testRuleActions() {
@@ -265,6 +272,7 @@ public class RuleEngineTest {
 
     /**
      * test rule triggers
+     *
      */
     @Test
     public void testRuleTriggers() {
@@ -291,7 +299,7 @@ public class RuleEngineTest {
     }
 
     /**
-     * test rule conditions
+     * test rule condition
      */
     @Test
     public void testRuleConditions() {
@@ -327,16 +335,16 @@ public class RuleEngineTest {
 
     private Rule createAutoMapRule() {
         Rule rule = new Rule("rule1");
-        rule.setTriggers(createTriggers(ModuleTypeManagerMockup.TRIGGER_TYPE));
-        rule.setConditions(createConditions(ModuleTypeManagerMockup.CONDITION_TYPE));
-        rule.setActions(createActions(ModuleTypeManagerMockup.ACTION_TYPE));
+        rule.setTriggers(createTriggers(ModuleTypeRegistryMockup.TRIGGER_TYPE));
+        rule.setConditions(createConditions(ModuleTypeRegistryMockup.CONDITION_TYPE));
+        rule.setActions(createActions(ModuleTypeRegistryMockup.ACTION_TYPE));
         return rule;
 
     }
 
     private List<Trigger> createTriggers(String type) {
         List<Trigger> triggers = new ArrayList<Trigger>();
-        Map<String, Object> configurations = new HashMap<String, Object>();
+        Configuration configurations = new Configuration();
         configurations.put("a", "x");
         configurations.put("b", "y");
         configurations.put("c", "z");
@@ -346,7 +354,7 @@ public class RuleEngineTest {
 
     private List<Condition> createConditions(String type) {
         List<Condition> conditions = new ArrayList<Condition>();
-        Map<String, Object> configurations = new HashMap<String, Object>();
+        Configuration configurations = new Configuration();
         configurations.put("a", "x");
         configurations.put("b", "y");
         configurations.put("c", "z");
@@ -361,7 +369,7 @@ public class RuleEngineTest {
 
     private List<Action> createActions(String type) {
         List<Action> actions = new ArrayList<Action>();
-        Map<String, Object> configurations = new HashMap<String, Object>();
+        Configuration configurations = new Configuration();
         configurations.put("a", "x");
         configurations.put("b", "y");
         configurations.put("c", "z");

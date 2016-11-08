@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2014-2015 openHAB UG (haftungsbeschraenkt) and others.
+ * Copyright (c) 2014-2016 by the respective copyright holders.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -11,7 +11,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ScheduledExecutorService;
-
 import org.eclipse.smarthome.config.core.Configuration;
 import org.eclipse.smarthome.config.core.validation.ConfigDescriptionValidator;
 import org.eclipse.smarthome.config.core.validation.ConfigValidationException;
@@ -121,6 +120,7 @@ public abstract class BaseThingHandler implements ThingHandler {
     }
 
     public void unsetBundleContext(final BundleContext bundleContext) {
+        linkRegistryServiceTracker.close();
         thingRegistryServiceTracker.close();
         this.bundleContext = null;
     }
@@ -278,6 +278,53 @@ public abstract class BaseThingHandler implements ThingHandler {
     }
 
     /**
+     * Emits an event for the given channel.
+     *
+     * @param channelUID UID of the channel over which the event will be emitted
+     * @param event Event to emit
+     */
+    protected void triggerChannel(ChannelUID channelUID, String event) {
+        synchronized (this) {
+            if (this.callback != null) {
+                this.callback.channelTriggered(this.getThing(), channelUID, event);
+            } else {
+                throw new IllegalStateException("Could not update state, because callback is missing");
+            }
+        }
+    }
+
+    /**
+     * Emits an event for the given channel. Will use the thing UID to infer the
+     * unique channel UID.
+     *
+     * @param channelUID UID of the channel over which the event will be emitted
+     * @param event Event to emit
+     */
+    protected void triggerChannel(String channelUID, String event) {
+        triggerChannel(new ChannelUID(this.getThing().getUID(), channelUID), event);
+    }
+
+    /**
+     * Emits an event for the given channel. Will use the thing UID to infer the
+     * unique channel UID.
+     *
+     * @param channelUID UID of the channel over which the event will be emitted
+     */
+    protected void triggerChannel(String channelUID) {
+        triggerChannel(new ChannelUID(this.getThing().getUID(), channelUID), "");
+    }
+
+    /**
+     * Emits an event for the given channel. Will use the thing UID to infer the
+     * unique channel UID.
+     *
+     * @param channelUID UID of the channel over which the event will be emitted
+     */
+    protected void triggerChannel(ChannelUID channelUID) {
+        triggerChannel(channelUID, "");
+    }
+
+    /**
      * Sends a command for a channel of the thing.
      *
      * @param channelID
@@ -368,7 +415,8 @@ public abstract class BaseThingHandler implements ThingHandler {
     protected ThingBuilder editThing() {
         return ThingBuilder.create(this.thing.getThingTypeUID(), this.thing.getUID())
                 .withBridge(this.thing.getBridgeUID()).withChannels(this.thing.getChannels())
-                .withConfiguration(this.thing.getConfiguration());
+                .withConfiguration(this.thing.getConfiguration()).withLabel(this.thing.getLabel())
+                .withLocation(this.thing.getLocation()).withProperties(this.thing.getProperties());
     }
 
     /**
@@ -544,7 +592,7 @@ public abstract class BaseThingHandler implements ThingHandler {
 
     protected void changeThingType(ThingTypeUID thingTypeUID, Configuration configuration) {
         if (this.callback != null) {
-            this.callback.changeThingType(getThing(), thingTypeUID, configuration);
+            this.callback.migrateThingType(getThing(), thingTypeUID, configuration);
         } else {
             throw new IllegalStateException("Could not change thing type because callback is missing");
         }

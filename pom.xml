@@ -68,7 +68,6 @@
     <module>tools</module>
     <module>targetplatform</module>
     <module>distribution</module>
-    <module>build-tools</module>
   </modules>
 
   <build>
@@ -480,7 +479,7 @@
               </configuration>
               <dependencies>
                 <dependency>
-                  <groupId>org.eclipse.smarthome.build-tools</groupId>
+                  <groupId>org.eclipse.smarthome.tools</groupId>
                   <artifactId>static-code-analysis-config</artifactId>
                   <version>${project.version}</version>
                 </dependency>
@@ -507,7 +506,7 @@
               </configuration>
               <dependencies>
                 <dependency>
-                  <groupId>org.eclipse.smarthome.build-tools</groupId>
+                  <groupId>org.eclipse.smarthome.tools</groupId>
                   <artifactId>static-code-analysis-config</artifactId>
                   <version>${project.version}</version>
                 </dependency>
@@ -536,7 +535,7 @@
                 <!-- <timeout>60000</timeout> -->
                 <plugins>
                   <plugin>
-                    <groupId>org.eclipse.smarthome.build-tools</groupId>
+                    <groupId>org.eclipse.smarthome.tools</groupId>
                     <artifactId>static-code-analysis-config</artifactId>
                     <version>${project.version}</version>
                   </plugin>
@@ -557,7 +556,7 @@
                   <version>${findbugs.version}</version>
                 </dependency>
                 <dependency>
-                  <groupId>org.eclipse.smarthome.build-tools</groupId>
+                  <groupId>org.eclipse.smarthome.tools</groupId>
                   <artifactId>static-code-analysis-config</artifactId>
                   <version>${project.version}</version>
                 </dependency>
@@ -582,14 +581,14 @@
                 <includeProjectDependencies>false</includeProjectDependencies>
                 <includePluginDependencies>true</includePluginDependencies>
                 <executableDependency>
-                  <groupId>org.eclipse.smarthome.build-tools</groupId>
+                  <groupId>org.eclipse.smarthome.tools</groupId>
                   <artifactId>static-code-analysis-report</artifactId>
                 </executableDependency>
                 <mainClass>org.eclipse.smarthome.buildtools.report.ScanReportUtility</mainClass>
               </configuration>
               <dependencies>
                 <dependency>
-                  <groupId>org.eclipse.smarthome.build-tools</groupId>
+                  <groupId>org.eclipse.smarthome.tools</groupId>
                   <artifactId>static-code-analysis-report</artifactId>
                   <version>${project.version}</version>
                   <type>jar</type>

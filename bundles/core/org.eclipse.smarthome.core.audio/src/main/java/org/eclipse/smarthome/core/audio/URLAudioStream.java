@@ -90,7 +90,7 @@ public class URLAudioStream extends org.eclipse.smarthome.core.audio.AudioStream
                 os.write(req.getBytes());
                 is = shoutCastSocket.getInputStream();
             } else {
-                is = streamUrl.openStream();
+                is = connection.getInputStream();
             }
             return is;
         } catch (MalformedURLException e) {

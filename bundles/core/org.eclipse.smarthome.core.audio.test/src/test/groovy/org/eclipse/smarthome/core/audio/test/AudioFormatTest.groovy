@@ -62,23 +62,19 @@ public class AudioFormatTest extends AudioOSGiTest {
 
     @Test
     public void 'wave container is preferred when determinig a best match'(){
-        Set<AudioFormat> inputs = new HashSet<>()
-        Set<AudioFormat> outputs = new HashSet<>()
+        Set<AudioFormat> audioFormats = new HashSet<>()
 
         AudioFormat waveContainerAudioFormat = new AudioFormat(testContainer, testCodec,
                 true, testBitDepth, testBitRate, testFrequency)
         AudioFormat oggContainerAudioFormat = new AudioFormat(AudioFormat.CONTAINER_OGG, testCodec,
                 true, testBitDepth, testBitRate, testFrequency)
 
-        inputs.add(waveContainerAudioFormat)
-        inputs.add(oggContainerAudioFormat)
+        audioFormats.add(waveContainerAudioFormat)
+        audioFormats.add(oggContainerAudioFormat)
 
-        outputs.add(waveContainerAudioFormat)
-        outputs.add(oggContainerAudioFormat)
-
-        AudioFormat bestMatch = AudioFormat.getBestMatch(inputs, outputs)
+        AudioFormat preferredFormat = AudioFormat.getPreferredFormat(audioFormats)
         assertThat "The best match for the audio format was not as expected",
-                bestMatch,
+                preferredFormat,
                 is(equalTo(waveContainerAudioFormat))
     }
 

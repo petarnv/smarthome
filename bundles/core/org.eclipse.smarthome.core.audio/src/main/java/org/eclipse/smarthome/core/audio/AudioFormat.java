@@ -253,12 +253,11 @@ public class AudioFormat {
             for (AudioFormat output : outputs) {
                 if (output.isCompatible(preferredFormat)) {
                     return preferredFormat;
-                }
-            }
-            for (AudioFormat output : outputs) {
-                for (AudioFormat input : inputs) {
-                    if (output.isCompatible(input)) {
-                        return input;
+                } else {
+                    for (AudioFormat input : inputs) {
+                        if (output.isCompatible(input)) {
+                            return input;
+                        }
                     }
                 }
             }

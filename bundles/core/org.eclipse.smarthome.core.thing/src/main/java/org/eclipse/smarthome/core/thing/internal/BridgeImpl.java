@@ -14,12 +14,17 @@ import org.eclipse.smarthome.core.thing.Bridge;
 import org.eclipse.smarthome.core.thing.Thing;
 import org.eclipse.smarthome.core.thing.ThingTypeUID;
 import org.eclipse.smarthome.core.thing.ThingUID;
+import org.eclipse.smarthome.core.thing.binding.BridgeHandler;
+import org.eclipse.smarthome.core.thing.binding.ThingHandler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.ImmutableList;
 
 public class BridgeImpl extends ThingImpl implements Bridge {
 
     private transient List<Thing> things = new CopyOnWriteArrayList<>();
+    private transient Logger logger = LoggerFactory.getLogger(BridgeImpl.class);
 
     /**
      * Package protected default constructor to allow reflective instantiation.
@@ -61,6 +66,18 @@ public class BridgeImpl extends ThingImpl implements Bridge {
     @Override
     public List<Thing> getThings() {
         return ImmutableList.copyOf(things);
+    }
+
+    @Override
+    public BridgeHandler getHandler() {
+        BridgeHandler bridgeHandler = null;
+        ThingHandler thingHandler = super.getHandler();
+        if (thingHandler instanceof BridgeHandler) {
+            bridgeHandler = (BridgeHandler) thingHandler;
+        } else if (thingHandler != null) {
+            logger.warn("Handler of bridge '{}' must implement BridgeHandler interface.", getUID());
+        }
+        return bridgeHandler;
     }
 
 }

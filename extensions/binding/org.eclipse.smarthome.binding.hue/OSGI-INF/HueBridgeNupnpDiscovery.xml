@@ -8,9 +8,9 @@
     http://www.eclipse.org/legal/epl-v10.html
 
 -->
-<scr:component xmlns:scr="http://www.osgi.org/xmlns/scr/v1.1.0" immediate="true" name="org.eclipse.smarthome.io.rest.core.binding.ExtensionEventFactory">
-   <implementation class="org.eclipse.smarthome.io.rest.core.extensions.ExtensionEventFactory"/>
+<scr:component xmlns:scr="http://www.osgi.org/xmlns/scr/v1.1.0" immediate="true" name="org.eclipse.smarthome.binding.hue.discovery.bridge.nupnp">
+   <implementation class="org.eclipse.smarthome.binding.hue.internal.discovery.HueBridgeNupnpDiscovery"/>
    <service>
-      <provide interface="org.eclipse.smarthome.core.events.EventFactory"/>
+      <provide interface="org.eclipse.smarthome.config.discovery.DiscoveryService"/>
    </service>
 </scr:component>

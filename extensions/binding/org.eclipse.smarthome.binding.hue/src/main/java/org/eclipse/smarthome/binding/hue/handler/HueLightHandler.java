@@ -25,7 +25,6 @@ import org.eclipse.smarthome.core.thing.ChannelUID;
 import org.eclipse.smarthome.core.thing.Thing;
 import org.eclipse.smarthome.core.thing.ThingStatus;
 import org.eclipse.smarthome.core.thing.ThingStatusDetail;
-import org.eclipse.smarthome.core.thing.ThingStatusInfo;
 import org.eclipse.smarthome.core.thing.ThingTypeUID;
 import org.eclipse.smarthome.core.thing.binding.BaseThingHandler;
 import org.eclipse.smarthome.core.thing.binding.ThingHandler;
@@ -61,14 +60,14 @@ public class HueLightHandler extends BaseThingHandler implements LightStatusList
 
     public final static Set<ThingTypeUID> SUPPORTED_THING_TYPES = Sets.newHashSet(THING_TYPE_COLOR_LIGHT,
             THING_TYPE_COLOR_TEMPERATURE_LIGHT, THING_TYPE_DIMMABLE_LIGHT, THING_TYPE_EXTENDED_COLOR_LIGHT,
-            THING_TYPE_ON_OFF_LIGHT);
+            THING_TYPE_ON_OFF_LIGHT, THING_TYPE_ON_OFF_PLUG, THING_TYPE_DIMMABLE_PLUG);
 
     private final static Map<String, List<String>> VENDOR_MODEL_MAP = new ImmutableMap.Builder<String, List<String>>()
             .put("Philips",
                     Lists.newArrayList("LCT001", "LCT002", "LCT003", "LCT007", "LLC001", "LLC006", "LLC007", "LLC010",
                             "LLC011", "LLC012", "LLC013", "LLC020", "LST001", "LST002", "LWB004", "LWB006", "LWB007",
                             "LWL001"))
-            .put("OSRAM", Lists.newArrayList("Classic_A60_RGBW", "PAR16_50_TW", "Surface_Light_TW")).build();
+            .put("OSRAM", Lists.newArrayList("Classic_A60_RGBW", "PAR16_50_TW", "Surface_Light_TW", "Plug_01")).build();
 
     private final static String OSRAM_PAR16_50_TW_MODEL_ID = "PAR16_50_TW";
 
@@ -98,12 +97,6 @@ public class HueLightHandler extends BaseThingHandler implements LightStatusList
     public void initialize() {
         logger.debug("Initializing hue light handler.");
         initializeThing((getBridge() == null) ? null : getBridge().getStatus());
-    }
-
-    @Override
-    public void bridgeStatusChanged(ThingStatusInfo bridgeStatusInfo) {
-        logger.debug("bridgeStatusChanged {}", bridgeStatusInfo);
-        initializeThing(bridgeStatusInfo.getStatus());
     }
 
     private void initializeThing(ThingStatus bridgeStatus) {

@@ -8,7 +8,13 @@ angular.module('PaperUI.services', [ 'PaperUI.constants' ]).config(function($htt
             'responseError' : function(rejection) {
                 var showError = rejection.showError;
                 if (showError !== false) {
-                    $injector.get('toastService').showErrorToast('ERROR: ' + rejection.status + ' - ' + rejection.statusText);
+                    var errorText = "";
+                    if (rejection.data && rejection.data.customMessage) {
+                        errorText = rejection.data.customMessage
+                    } else {
+                        errorText = rejection.statusText;
+                    }
+                    $injector.get('toastService').showErrorToast('ERROR: ' + rejection.status + ' - ' + errorText);
                 }
                 return $q.reject(rejection);
             }
@@ -125,7 +131,12 @@ angular.module('PaperUI.services', [ 'PaperUI.constants' ]).config(function($htt
                 parameter.locale = window.localStorage.getItem('paperui.language');
                 if (parameter.context) {
                     if (parameter.context.toUpperCase() === 'ITEM') {
-                        parameter.element = 'select';
+                        if (parameter.multiple) {
+                            parameter.element = 'multiSelect';
+                            parameter.limitToOptions = true;
+                        } else {
+                            parameter.element = 'select';
+                        }
                     } else if (parameter.context.toUpperCase() === 'DATE') {
                         if (parameter.type.toUpperCase() === 'TEXT') {
                             parameter.element = 'date';
@@ -134,7 +145,12 @@ angular.module('PaperUI.services', [ 'PaperUI.constants' ]).config(function($htt
                             parameter.context = "";
                         }
                     } else if (parameter.context.toUpperCase() === 'THING') {
-                        parameter.element = 'select';
+                        if (parameter.multiple) {
+                            parameter.element = 'multiSelect';
+                            parameter.limitToOptions = true;
+                        } else {
+                            parameter.element = 'select';
+                        }
                         thingList = thingList === undefined ? thingService.getAll() : thingList;
                         parameter.options = thingList;
                     } else if (parameter.context.toUpperCase() === 'TIME') {
@@ -176,21 +192,22 @@ angular.module('PaperUI.services', [ 'PaperUI.constants' ]).config(function($htt
                 } else if (parameter.type.toUpperCase() === 'BOOLEAN') {
                     parameter.element = 'switch';
                 } else if (parameter.type.toUpperCase() === 'INTEGER' || parameter.type.toUpperCase() === 'DECIMAL') {
-                    if (parameter.options && parameter.options.length > 0) {
-                        if (parameter.multiple) {
-                            parameter.element = 'multiSelect';
-                        } else {
-                            parameter.element = "select";
-                        }
+                    if (parameter.multiple) {
+                        parameter.element = 'multiSelect';
+                    } else if (parameter.options && parameter.options.length > 0) {
+                        parameter.element = "select";
+                        parameter.options = parameter.options;
+                    } else {
+                        parameter.element = 'input';
+                    }
+                    parameter.inputType = 'number';
+                    if (parameter.options) {
                         for (var k = 0; k < parameter.options.length; k++) {
                             parameter.options[k].value = parseInt(parameter.options[k].value);
                         }
-                        if (parameter.defaultValue) {
-                            parameter.defaultValue = parseInt(parameter.defaultValue);
-                        }
-                    } else {
-                        parameter.element = 'input';
-                        parameter.inputType = 'number';
+                    }
+                    if (parameter.defaultValue) {
+                        parameter.defaultValue = parseInt(parameter.defaultValue);
                     }
                 } else {
                     parameter.element = 'input';

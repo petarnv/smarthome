@@ -23,11 +23,13 @@ import org.eclipse.smarthome.binding.lifx.internal.fields.MACAddress;
 import org.eclipse.smarthome.binding.lifx.internal.listener.LifxLightStateListener;
 import org.eclipse.smarthome.binding.lifx.internal.listener.LifxResponsePacketListener;
 import org.eclipse.smarthome.binding.lifx.internal.protocol.AcknowledgementResponse;
+import org.eclipse.smarthome.binding.lifx.internal.protocol.GetLightInfraredRequest;
 import org.eclipse.smarthome.binding.lifx.internal.protocol.GetLightPowerRequest;
 import org.eclipse.smarthome.binding.lifx.internal.protocol.GetRequest;
 import org.eclipse.smarthome.binding.lifx.internal.protocol.Packet;
 import org.eclipse.smarthome.binding.lifx.internal.protocol.PowerState;
 import org.eclipse.smarthome.binding.lifx.internal.protocol.SetColorRequest;
+import org.eclipse.smarthome.binding.lifx.internal.protocol.SetLightInfraredRequest;
 import org.eclipse.smarthome.binding.lifx.internal.protocol.SetLightPowerRequest;
 import org.eclipse.smarthome.binding.lifx.internal.protocol.SetPowerRequest;
 import org.eclipse.smarthome.core.common.ThreadPoolManager;
@@ -224,12 +226,32 @@ public class LifxLightStateChanger implements LifxLightStateListener, LifxRespon
         addSetColorRequestToMap();
     }
 
+    @Override
+    public void handleInfraredChange(PercentType oldInfrared, PercentType newInfrared) {
+        int infrared = percentTypeToInfrared(pendingLightState.getInfrared());
+        SetLightInfraredRequest packet = new SetLightInfraredRequest(infrared);
+        addPacketToMap(packet);
+    }
+
     private void addSetColorRequestToMap() {
         HSBType hsb = pendingLightState.getHSB();
+        if (hsb == null) {
+            // use default color when temperature is changed while color is unknown
+            hsb = LifxBindingConstants.DEFAULT_COLOR;
+        }
+
         PercentType temperature = pendingLightState.getTemperature();
-        SetColorRequest packet = new SetColorRequest(decimalTypeToHue(hsb.getHue()),
-                percentTypeToSaturation(hsb.getSaturation()), percentTypeToBrightness(hsb.getBrightness()),
-                percentTypeToKelvin(temperature), fadeTime);
+        if (temperature == null) {
+            // use default temperature when color is changed while temperature is unknown
+            temperature = LifxBindingConstants.DEFAULT_TEMPERATURE;
+        }
+
+        int hue = decimalTypeToHue(hsb.getHue());
+        int saturation = percentTypeToSaturation(hsb.getSaturation());
+        int brightness = percentTypeToBrightness(hsb.getBrightness());
+        int kelvin = percentTypeToKelvin(temperature);
+
+        SetColorRequest packet = new SetColorRequest(hue, saturation, brightness, kelvin, fadeTime);
         addPacketToMap(packet);
     }
 
@@ -259,6 +281,9 @@ public class LifxLightStateChanger implements LifxLightStateListener, LifxRespon
                 } else if (pendingPacket.packet instanceof SetColorRequest) {
                     GetRequest colorPacket = new GetRequest();
                     communicationHandler.sendPacket(colorPacket);
+                } else if (pendingPacket.packet instanceof SetLightInfraredRequest) {
+                    GetLightInfraredRequest infraredPacket = new GetLightInfraredRequest();
+                    communicationHandler.sendPacket(infraredPacket);
                 }
             } else {
                 logger.debug("{} : No pending packet found for ack with sequence number: {}", macAsHex,

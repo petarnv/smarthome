@@ -24,15 +24,19 @@ public class Voice {
     /**
      * Says the given text.
      *
+     * This method uses the default voice and the default audio sink to play the audio.
+     *
      * @param text the text to speak
      */
     @ActionDoc(text = "says a given text with the default voice")
     public static void say(@ParamDoc(name = "text") Object text) {
-        say(text.toString(), null);
+        say(text, null);
     }
 
     /**
      * Says the given text with a given voice.
+     *
+     * This method uses the default audio sink to play the audio.
      *
      * @param text the text to speak
      * @param voice the name of the voice to use or null, if the default voice should be used. If the voiceId is fully
@@ -40,7 +44,7 @@ public class Voice {
      *            voiceId is assumed to be available on the default TTS service.
      */
     @ActionDoc(text = "says a given text with a given voice")
-    public static void say(@ParamDoc(name = "text") String text, @ParamDoc(name = "voice") String voice) {
+    public static void say(@ParamDoc(name = "text") Object text, @ParamDoc(name = "voice") String voice) {
         say(text, voice, null);
     }
 
@@ -54,11 +58,11 @@ public class Voice {
      * @param sink the name of audio sink to be used to play the audio or null, if the default sink should
      *            be used
      */
-    @ActionDoc(text = "says a given text through the default TTS service with a given voice")
-    public static void say(@ParamDoc(name = "text") String text, @ParamDoc(name = "voice") String voice,
+    @ActionDoc(text = "says a given text with a given voice through the given sink")
+    public static void say(@ParamDoc(name = "text") Object text, @ParamDoc(name = "voice") String voice,
             @ParamDoc(name = "sink") String sink) {
         if (StringUtils.isNotBlank(text.toString())) {
-            VoiceActionService.voiceManager.say(text, voice, sink);
+            VoiceActionService.voiceManager.say(text.toString(), voice, sink);
         }
     }
 
@@ -66,16 +70,59 @@ public class Voice {
      * Interprets the given text.
      *
      * This method uses the default Human Language Interpreter and passes the text to it.
+     * In case of interpretation error, the error message is played using the default audio sink.
      *
      * @param text the text to interpret
      */
-    @ActionDoc(text = "interprets a given text by the default human language interpreter")
-    public static void interpret(@ParamDoc(name = "text") Object text) {
+    @ActionDoc(text = "interprets a given text by the default human language interpreter", returns = "human language response")
+    public static String interpret(@ParamDoc(name = "text") Object text) {
+        return interpret(text, null);
+    }
+
+    /**
+     * Interprets the given text with a given Human Language Interpreter.
+     *
+     * In case of interpretation error, the error message is played using the default audio sink.
+     *
+     * @param text the text to interpret
+     * @param interpreter the Human Language Interpreter to be used
+     */
+    @ActionDoc(text = "interprets a given text by a given human language interpreter", returns = "human language response")
+    public static String interpret(@ParamDoc(name = "text") Object text,
+            @ParamDoc(name = "interpreter") String interpreter) {
+        String response;
         try {
-            VoiceActionService.voiceManager.interpret(text.toString());
+            response = VoiceActionService.voiceManager.interpret(text.toString(), interpreter);
         } catch (InterpretationException e) {
             say(e.getMessage());
+            response = e.getMessage();
         }
+        return response;
+    }
+
+    /**
+     * Interprets the given text with a given Human Language Interpreter.
+     *
+     * In case of interpretation error, the error message is played using the given audio sink.
+     * If sink parameter is null, the error message is simply not played.
+     *
+     * @param text the text to interpret
+     * @param interpreter the Human Language Interpreter to be used
+     * @param sink the name of audio sink to be used to play the error message
+     */
+    @ActionDoc(text = "interprets a given text by a given human language interpreter", returns = "human language response")
+    public static String interpret(@ParamDoc(name = "text") Object text,
+            @ParamDoc(name = "interpreter") String interpreter, @ParamDoc(name = "sink") String sink) {
+        String response;
+        try {
+            response = VoiceActionService.voiceManager.interpret(text.toString(), interpreter);
+        } catch (InterpretationException e) {
+            if (sink != null) {
+                say(e.getMessage(), null, sink);
+            }
+            response = e.getMessage();
+        }
+        return response;
     }
 
 }

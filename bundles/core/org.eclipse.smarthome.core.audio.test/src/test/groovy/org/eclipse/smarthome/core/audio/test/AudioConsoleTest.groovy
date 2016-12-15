@@ -13,7 +13,6 @@ import static org.junit.Assert.*
 
 import org.eclipse.smarthome.core.audio.*
 import org.eclipse.smarthome.core.audio.internal.AudioConsoleCommandExtension
-import org.eclipse.smarthome.core.audio.test.mock.ConsoleMock
 import org.eclipse.smarthome.io.console.Console
 import org.eclipse.smarthome.io.console.extensions.ConsoleCommandExtension
 import org.junit.Before
@@ -27,7 +26,9 @@ import org.junit.Test
  */
 public class AudioConsoleTest extends AudioOSGiTest {
     private AudioConsoleCommandExtension audioConsoleCommandExtension
-    private Console consoleMock = new ConsoleMock()
+
+    private def consoleOutput
+    private def consoleFake = [println: {String s -> consoleOutput = s}] as Console
 
     @Before
     public void setUp(){
@@ -40,7 +41,7 @@ public class AudioConsoleTest extends AudioOSGiTest {
         audioStream = getFileAudioStream(WAV_FILE_PATH)
 
         String[] args = [audioConsoleCommandExtension.SUBCMD_PLAY, audioStream.file.getName()]
-        audioConsoleCommandExtension.execute(args, consoleMock)
+        audioConsoleCommandExtension.execute(args, consoleFake)
 
         assertCompatibleFormat()
     }
@@ -49,8 +50,8 @@ public class AudioConsoleTest extends AudioOSGiTest {
     public void 'audio console plays file for a specified sink'(){
         audioStream = getFileAudioStream(WAV_FILE_PATH)
 
-        String[] args = [audioConsoleCommandExtension.SUBCMD_PLAY, audioSinkMock.getId(), audioStream.file.getName()]
-        audioConsoleCommandExtension.execute(args, consoleMock)
+        String[] args = [audioConsoleCommandExtension.SUBCMD_PLAY, audioSinkFake.getId(), audioStream.file.getName()]
+        audioConsoleCommandExtension.execute(args, consoleFake)
 
         assertCompatibleFormat()
     }
@@ -65,11 +66,11 @@ public class AudioConsoleTest extends AudioOSGiTest {
         String url = generateURL(AUDIO_SERVLET_PROTOCOL, AUDIO_SERVLET_HOSTNAME, AUDIO_SERVLET_PORT, path)
 
         String[] args = [audioConsoleCommandExtension.SUBCMD_STREAM, url]
-        audioConsoleCommandExtension.execute(args, consoleMock)
+        audioConsoleCommandExtension.execute(args, consoleFake)
 
         assertThat "The streamed url was not as expected",
-                audioSinkMock.audioStream.getURL(),
-                is(equalTo(url))
+                audioSinkFake.audioStream.getURL(),
+                is(url)
     }
 
     @Test
@@ -81,23 +82,23 @@ public class AudioConsoleTest extends AudioOSGiTest {
         String path = audioServlet.serve(audioStream)
         String url = generateURL(AUDIO_SERVLET_PROTOCOL, AUDIO_SERVLET_HOSTNAME, AUDIO_SERVLET_PORT, path)
 
-        String[] args = [audioConsoleCommandExtension.SUBCMD_STREAM, audioSinkMock.getId(), url]
-        audioConsoleCommandExtension.execute(args, consoleMock)
+        String[] args = [audioConsoleCommandExtension.SUBCMD_STREAM, audioSinkFake.getId(), url]
+        audioConsoleCommandExtension.execute(args, consoleFake)
 
         assertThat "The streamed url was not as expected",
-                audioSinkMock.audioStream.getURL(),
-                is(equalTo(url))
+                audioSinkFake.audioStream.getURL(),
+                is(url)
     }
 
     @Test
     public void 'audio console lists sinks'(){
         String[] args = [audioConsoleCommandExtension.SUBCMD_SINKS]
-        audioConsoleCommandExtension.execute(args, consoleMock)
+        audioConsoleCommandExtension.execute(args, consoleFake)
 
         waitForAssert({
             assertThat "The listed sink was not as expected",
-                    consoleMock.consoleOutput,
-                    is(equalTo(audioSinkMock.getId()))
+                    consoleOutput,
+                    is(audioSinkFake.getId())
         })
     }
 
@@ -106,20 +107,19 @@ public class AudioConsoleTest extends AudioOSGiTest {
         registerSource()
 
         String[] args = [audioConsoleCommandExtension.SUBCMD_SOURCES]
-        audioConsoleCommandExtension.execute(args, consoleMock)
+        audioConsoleCommandExtension.execute(args, consoleFake)
 
         waitForAssert({
             assertThat "The listed source was not as expected",
-                    consoleMock.consoleOutput,
-                    is(equalTo(audioSourceMock.getId()))
+                    consoleOutput,
+                    is(audioSourceFake.getId())
         })
     }
 
     protected AudioConsoleCommandExtension getAudioConsoleCommandExtension(){
         audioConsoleCommandExtension = new AudioConsoleCommandExtension()
-        registerService(audioConsoleCommandExtension, ConsoleCommandExtension.class.getName())
 
-        audioConsoleCommandExtension = getService(ConsoleCommandExtension)
+        audioConsoleCommandExtension = getService(ConsoleCommandExtension, AudioConsoleCommandExtension)
         assertThat "Could not get AudioConsoleCommandExtension",
                 audioConsoleCommandExtension,
                 is(notNullValue())

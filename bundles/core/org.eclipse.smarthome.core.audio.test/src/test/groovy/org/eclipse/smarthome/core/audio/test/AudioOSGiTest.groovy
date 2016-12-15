@@ -11,13 +11,14 @@ package org.eclipse.smarthome.core.audio.test
 import static org.hamcrest.CoreMatchers.*
 import static org.junit.Assert.*
 
+import java.util.Locale;
+
 import org.apache.commons.lang.SystemUtils
 import org.eclipse.smarthome.config.core.ConfigConstants
 import org.eclipse.smarthome.core.audio.*
 import org.eclipse.smarthome.core.audio.internal.AudioManagerImpl
 import org.eclipse.smarthome.core.audio.internal.AudioServlet
-import org.eclipse.smarthome.core.audio.test.mock.AudioSinkMock
-import org.eclipse.smarthome.core.audio.test.mock.AudioSourceMock
+import org.eclipse.smarthome.core.audio.test.fake.AudioSinkFake
 import org.eclipse.smarthome.test.OSGiTest
 import org.junit.After
 import org.junit.AfterClass
@@ -34,10 +35,11 @@ import org.junit.BeforeClass
  */
 class AudioOSGiTest extends OSGiTest {
     protected AudioManager audioManager
-    protected AudioSink audioSinkMock
-    protected AudioSource audioSourceMock
+    protected AudioSink audioSinkFake
     protected AudioStream audioStream
     protected AudioServlet audioServlet
+    
+    protected def audioSourceFake
 
     protected final String AUDIO_SERVLET_PROTOCOL = "http"
     protected final String AUDIO_SERVLET_HOSTNAME = "localhost"
@@ -54,7 +56,9 @@ class AudioOSGiTest extends OSGiTest {
 
     @BeforeClass
     public static void setUpClass(){
+        // Store the initial value for the configuration directory property, so that it can be restored at the test end.
         defaultConfigDir = System.getProperty(ConfigConstants.CONFIG_DIR_PROG_ARGUMENT)
+        // Set new configuration directory for test purposes.
         System.setProperty(ConfigConstants.CONFIG_DIR_PROG_ARGUMENT, CONFIGURATION_DIRECTORY_NAME)
     }
 
@@ -73,6 +77,7 @@ class AudioOSGiTest extends OSGiTest {
     @AfterClass
     public static void tearDownClass(){
         if(defaultConfigDir != null){
+            // Set the value for the configuration directory property to its initial one.
             System.setProperty(ConfigConstants.CONFIG_DIR_PROG_ARGUMENT, defaultConfigDir)
         } else {
             System.clearProperty(ConfigConstants.CONFIG_DIR_PROG_ARGUMENT)
@@ -80,13 +85,13 @@ class AudioOSGiTest extends OSGiTest {
     }
 
     protected void registerSource(){
-        audioSourceMock = new AudioSourceMock()
-        registerService(audioSourceMock, AudioSource.class.getName())
+        audioSourceFake = [getId: { -> 'testSourceId'}, getLabel: { Locale locale -> 'testSourceLabel'}] as AudioSource
+        registerService(audioSourceFake, AudioSource.class.getName())
     }
 
     protected void registerSink(){
-        audioSinkMock = new AudioSinkMock()
-        registerService(audioSinkMock, AudioSink.class.getName())
+        audioSinkFake = new AudioSinkFake()
+        registerService(audioSinkFake, AudioSink.class.getName())
     }
 
     protected ByteArrayAudioStream getByteArrayAudioStream(String container, String codec){
@@ -114,10 +119,10 @@ class AudioOSGiTest extends OSGiTest {
 
     protected void assertCompatibleFormat(){
         AudioFormat expextedAudioFormat = audioStream.getFormat()
-        AudioFormat sinkAudioFormat = audioSinkMock.audioFormat
+        AudioFormat sinkAudioFormat = audioSinkFake.audioFormat
 
         waitForAssert({
-            assertThat "The sink ${audioSinkMock.getId()} was not updated with the expected audioFormat $expextedAudioFormat",
+            assertThat "The sink ${audioSinkFake.getId()} was not updated with the expected audioFormat $expextedAudioFormat",
                     sinkAudioFormat.isCompatible(expextedAudioFormat),
                     is(true)
         })

@@ -6,7 +6,7 @@
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v10.html
  */
-package org.eclipse.smarthome.core.audio.test.mock
+package org.eclipse.smarthome.core.audio.test.fake
 
 import org.eclipse.smarthome.core.audio.AudioFormat
 import org.eclipse.smarthome.core.audio.AudioSink
@@ -14,7 +14,7 @@ import org.eclipse.smarthome.core.audio.AudioStream
 import org.eclipse.smarthome.core.audio.UnsupportedAudioFormatException
 import org.eclipse.smarthome.core.library.types.PercentType
 
-public class AudioSinkMock implements AudioSink{
+public class AudioSinkFake implements AudioSink{
     public AudioStream audioStream
     public AudioFormat audioFormat
     public boolean isStreamProcessed = false
@@ -35,7 +35,7 @@ public class AudioSinkMock implements AudioSink{
     @Override
     public void process(AudioStream audioStream) throws UnsupportedAudioFormatException {
         if(isUnsupportedAudioFormatExceptionExpected){
-            throw new UnsupportedAudioFormatException("test message", null)
+            throw new UnsupportedAudioFormatException("Expected audio format exception", null)
         }
         this.audioStream = audioStream
         audioFormat =  audioStream.getFormat()

@@ -15,6 +15,7 @@ import org.eclipse.jetty.client.HttpClient
 import org.eclipse.jetty.client.api.ContentResponse
 import org.eclipse.jetty.client.api.Request
 import org.eclipse.jetty.http.HttpMethod
+import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.smarthome.core.audio.*
 import org.junit.Test
 
@@ -29,9 +30,6 @@ public class AudioServletTest extends AudioOSGiTest {
     private final String MEDIA_TYPE_AUDIO_OGG = "audio/ogg"
     private final String MEDIA_TYPE_AUDIO_MPEG = "audio/mpeg"
 
-    private final int STATUS_CODE_OK = 200
-    private final int STATUS_CODE_NOT_FOUND = 404
-
     @Test
     public void 'audio servlet processes byte array stream'(){
         audioStream = getByteArrayAudioStream(AudioFormat.CONTAINER_NONE, AudioFormat.CODEC_MP3)
@@ -40,10 +38,10 @@ public class AudioServletTest extends AudioOSGiTest {
 
         assertThat "The response status was not as expected",
                 response.getStatus(),
-                is(equalTo(STATUS_CODE_OK))
+                is(HttpStatus.OK_200)
         assertThat "The response content was not as expected",
                 response.getContent(),
-                is(equalTo(testByteArray))
+                is(testByteArray)
         assertThat "The response media type was not as expected", response.getMediaType(), is(equalTo(MEDIA_TYPE_AUDIO_MPEG))
     }
 
@@ -55,10 +53,10 @@ public class AudioServletTest extends AudioOSGiTest {
 
         assertThat "The response status was not as expected",
                 response.getStatus(),
-                is(equalTo(STATUS_CODE_OK))
+                is(HttpStatus.OK_200)
         assertThat "The response media type was not as expected",
                 response.getMediaType(),
-                is(equalTo(MEDIA_TYPE_AUDIO_WAV))
+                is(MEDIA_TYPE_AUDIO_WAV)
     }
 
     @Test
@@ -69,13 +67,13 @@ public class AudioServletTest extends AudioOSGiTest {
 
         assertThat "The response status was not as expected",
                 response.getStatus(),
-                is(equalTo(STATUS_CODE_OK))
+                is(HttpStatus.OK_200)
         assertThat "The response content was not as expected",
                 response.getContent(),
-                is(equalTo(testByteArray))
+                is(testByteArray)
         assertThat "The response media type was not as expected",
                 response.getMediaType(),
-                is(equalTo(MEDIA_TYPE_AUDIO_OGG))
+                is(MEDIA_TYPE_AUDIO_OGG)
     }
 
     @Test
@@ -86,7 +84,7 @@ public class AudioServletTest extends AudioOSGiTest {
 
         assertThat "The response status was not as expected",
                 response.getStatus(),
-                is(equalTo(STATUS_CODE_OK))
+                is(HttpStatus.OK_200)
         assertThat "The response media type was not as expected",
                 response.getMediaType(),
                 is(nullValue())
@@ -107,19 +105,19 @@ public class AudioServletTest extends AudioOSGiTest {
 
         assertThat "The response status was not as expected",
                 response.getStatus(),
-                is(equalTo(STATUS_CODE_OK))
+                is(HttpStatus.OK_200)
         assertThat "The response content was not as expected",
                 response.getContent(),
-                is(equalTo(testByteArray))
+                is(testByteArray)
         assertThat "The response media type was not as expected",
                 response.getMediaType(),
-                is(equalTo(MEDIA_TYPE_AUDIO_MPEG))
+                is(MEDIA_TYPE_AUDIO_MPEG)
 
         response = request.send()
 
         assertThat "The response status was not as expected",
                 response.getStatus(),
-                is(equalTo(STATUS_CODE_NOT_FOUND))
+                is(HttpStatus.NOT_FOUND_404)
     }
 
     @Test
@@ -138,13 +136,13 @@ public class AudioServletTest extends AudioOSGiTest {
 
         assertThat "The response status was not as expected",
                 response.getStatus(),
-                is(equalTo(STATUS_CODE_OK))
+                is(HttpStatus.OK_200)
         assertThat "The response content was not as expected",
                 response.getContent(),
-                is(equalTo(testByteArray))
+                is(testByteArray)
         assertThat "The response media type was not as expected",
                 response.getMediaType(),
-                is(equalTo(MEDIA_TYPE_AUDIO_MPEG))
+                is(MEDIA_TYPE_AUDIO_MPEG)
 
         assertThat "The audio stream was not added to the multitime streams",
                 audioServlet.multiTimeStreams.containsValue(audioStream),
@@ -160,7 +158,7 @@ public class AudioServletTest extends AudioOSGiTest {
         response = request.send()
         assertThat "The response status was not as expected",
                 response.getStatus(),
-                is(equalTo(STATUS_CODE_NOT_FOUND))
+                is(HttpStatus.NOT_FOUND_404)
     }
 
     private ContentResponse getHttpResponse(AudioStream audioStream){

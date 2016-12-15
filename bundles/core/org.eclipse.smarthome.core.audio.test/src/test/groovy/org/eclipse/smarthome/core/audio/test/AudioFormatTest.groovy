@@ -75,7 +75,7 @@ public class AudioFormatTest extends AudioOSGiTest {
         AudioFormat preferredFormat = AudioFormat.getPreferredFormat(audioFormats)
         assertThat "The best match for the audio format was not as expected",
                 preferredFormat,
-                is(equalTo(waveContainerAudioFormat))
+                is(waveContainerAudioFormat)
     }
 
     @Test
@@ -96,7 +96,7 @@ public class AudioFormatTest extends AudioOSGiTest {
         AudioFormat bestMatch = AudioFormat.getBestMatch(inputs, outputs)
         assertThat "The best match for the audio format was not as expected",
                 bestMatch,
-                is(equalTo(alawAudioFormat))
+                is(alawAudioFormat)
     }
 
     @Test

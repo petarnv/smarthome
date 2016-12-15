@@ -14,7 +14,7 @@ import static org.junit.Assert.*
 import org.eclipse.smarthome.config.core.ParameterOption
 import org.eclipse.smarthome.core.audio.*
 import org.eclipse.smarthome.core.audio.internal.AudioManagerImpl
-import org.eclipse.smarthome.core.audio.test.mock.AudioSinkMock
+import org.eclipse.smarthome.core.audio.test.fake.AudioSinkFake
 import org.eclipse.smarthome.core.library.types.PercentType
 import org.junit.Test
 
@@ -25,20 +25,6 @@ import org.junit.Test
  *
  */
 public class AudioManagerTest extends AudioOSGiTest {
-    private enum PlayType{
-        STREAM("stream"), FILE("file")
-
-        private String playType
-
-        public PlayType(String playType){
-            this.playType = playType
-        }
-
-        public String getPlayType(){
-            return playType
-        }
-    }
-
     @Test
     public void 'audio manager plays byte array audio stream'(){
         audioStream = getByteArrayAudioStream(AudioFormat.CONTAINER_WAVE, AudioFormat.CODEC_MP3)
@@ -49,11 +35,11 @@ public class AudioManagerTest extends AudioOSGiTest {
     public void 'null streams are not processed'(){
         registerSink()
 
-        audioManager.play(null, audioSinkMock.getId())
+        audioManager.play(null, audioSinkFake.getId())
 
         waitForAssert({
             assertThat "null stream was processed",
-                    audioSinkMock.isStreamProcessed,
+                    audioSinkFake.isStreamProcessed,
                     is(false)
         })
     }
@@ -89,13 +75,13 @@ public class AudioManagerTest extends AudioOSGiTest {
                 file.exists(),
                 is(true)
 
-        audioSinkMock = new AudioSinkMock()
+        audioSinkFake = new AudioSinkFake()
 
-        audioManager.playFile(file.getName(), audioSinkMock.getId())
+        audioManager.playFile(file.getName(), audioSinkFake.getId())
 
         waitForAssert({
-            assertThat "the file ${file.getName()} was processed",
-                    audioSinkMock.isStreamProcessed,
+            assertThat "The file ${file.getName()} was processed",
+                    audioSinkFake.isStreamProcessed,
                     is(false)
         })
     }
@@ -106,9 +92,9 @@ public class AudioManagerTest extends AudioOSGiTest {
 
         audioStream = getFileAudioStream(MP3_FILE_PATH)
 
-        audioSinkMock.isUnsupportedAudioFormatExceptionExpected = true
+        audioSinkFake.isUnsupportedAudioFormatExceptionExpected = true
         try{
-            audioManager.playFile(audioStream.file.getName(), audioSinkMock.getId())
+            audioManager.playFile(audioStream.file.getName(), audioSinkFake.getId())
         } catch (UnsupportedAudioFormatException e){
             fail("An exception $e was thrown, while trying to process a stream")
         }
@@ -122,30 +108,30 @@ public class AudioManagerTest extends AudioOSGiTest {
         PercentType sinkMockVolume = getSinkMockVolume(initialVolume)
 
         waitForAssert({
-            assertThat "the volume of the sink ${audioSinkMock.getId()} was not as expected",
+            assertThat "The volume of the sink ${audioSinkFake.getId()} was not as expected",
                     sinkMockVolume,
-                    is(equalTo(initialVolume))
+                    is(initialVolume)
         })
     }
 
     @Test
     public void 'the volume of a null sink is zero'(){
-        assertThat "the volume was not as expected",
+        assertThat "The volume was not as expected",
                 audioManager.getVolume(null),
-                is(equalTo(PercentType.ZERO))
+                is(PercentType.ZERO)
     }
 
     @Test
     public void 'audio manager sets the volume of not registered sink to zero'(){
-        audioSinkMock = new AudioSinkMock()
+        audioSinkFake = new AudioSinkFake()
 
         PercentType initialVolume = new PercentType(67)
         PercentType sinkMockVolume = getSinkMockVolume(initialVolume)
 
         waitForAssert({
-            assertThat "the volume of the sink ${audioSinkMock.getId()} was not as expected",
+            assertThat "The volume of the sink ${audioSinkFake.getId()} was not as expected",
                     sinkMockVolume,
-                    is(equalTo(PercentType.ZERO))
+                    is(PercentType.ZERO)
         })
     }
 
@@ -153,12 +139,12 @@ public class AudioManagerTest extends AudioOSGiTest {
     public void 'setVolume method handles IOException'(){
         registerSink()
 
-        audioSinkMock.isIOExceptionExpected = true
+        audioSinkFake.isIOExceptionExpected = true
 
         try{
-            audioManager.setVolume(new PercentType(67), audioSinkMock.getId())
+            audioManager.setVolume(new PercentType(67), audioSinkFake.getId())
         } catch (IOException e){
-            fail("An exception $e was thrown, while trying to set the volume of the sink $audioSinkMock.getId()")
+            fail("An exception $e was thrown, while trying to set the volume of the sink $audioSinkFake.getId()")
         }
     }
 
@@ -166,15 +152,15 @@ public class AudioManagerTest extends AudioOSGiTest {
     public void 'getVolume method handles IOException'(){
         registerSink()
 
-        audioManager.setVolume(new PercentType(67), audioSinkMock.getId())
+        audioManager.setVolume(new PercentType(67), audioSinkFake.getId())
 
-        audioSinkMock.isIOExceptionExpected = true
+        audioSinkFake.isIOExceptionExpected = true
 
-        String sinkMockId = audioSinkMock.getId()
+        String sinkMockId = audioSinkFake.getId()
         try{
             audioManager.getVolume(sinkMockId)
         } catch (IOException e){
-            fail("An exception $e was thrown, while trying to set the volume of the sink $audioSinkMock.getId()")
+            fail("An exception $e was thrown, while trying to set the volume of the sink $audioSinkFake.getId()")
         }
     }
 
@@ -213,7 +199,7 @@ public class AudioManagerTest extends AudioOSGiTest {
         registerSink()
 
         Collection<ParameterOption> parameterOptions = audioManager.getParameterOptions(URI.create("wrong.uri"), AudioManagerImpl.CONFIG_DEFAULT_SINK, Locale.US)
-        assertThat "the parameter options were not as expected",
+        assertThat "The parameter options were not as expected",
                 parameterOptions,
                 is(nullValue())
     }
@@ -233,7 +219,7 @@ public class AudioManagerTest extends AudioOSGiTest {
 
     @Test
     public void 'audio manager does not process streams if there is no registered sink'(){
-        audioSinkMock = new AudioSinkMock()
+        audioSinkFake = new AudioSinkFake()
         int streamTimeout = 10
         assertServedStream(streamTimeout)
     }
@@ -242,20 +228,20 @@ public class AudioManagerTest extends AudioOSGiTest {
         registerSource()
 
         if(isSourceDefault){
-            audioManager.defaultSource = audioSourceMock.getId()
+            audioManager.defaultSource = audioSourceFake.getId()
         } else{
-            //just to make sure there is no default source
+            // just to make sure there is no default source
             audioManager.defaultSource = null
         }
 
-        assertThat "the source ${audioSourceMock.getId()} was not registered",
+        assertThat "The source ${audioSourceFake.getId()} was not registered",
                 audioManager.getSource(),
-                is(equalTo(audioSourceMock))
-        assertThat "the source ${audioSourceMock.getId()} was not added to the set of sources",
-                audioManager.getSourceIds().contains(audioSourceMock.getId()),
+                is(audioSourceFake)
+        assertThat "The source ${audioSourceFake.getId()} was not added to the set of sources",
+                audioManager.getSourceIds().contains(audioSourceFake.getId()),
                 is(true)
-        assertThat "the source ${audioSourceMock.getId()} was not added to the set of sources",
-                audioManager.getSourceIds(audioSourceMock.getId()).contains(audioSourceMock.getId()),
+        assertThat "The source ${audioSourceFake.getId()} was not added to the set of sources",
+                audioManager.getSourceIds(audioSourceFake.getId()).contains(audioSourceFake.getId()),
                 is(true)
     }
 
@@ -263,20 +249,20 @@ public class AudioManagerTest extends AudioOSGiTest {
         registerSink()
 
         if(isSinkDefault){
-            audioManager.defaultSink = audioSinkMock.getId()
+            audioManager.defaultSink = audioSinkFake.getId()
         } else{
-            //just to make sure there is no default source
+            // just to make sure there is no default sink
             audioManager.defaultSink = null
         }
 
-        assertThat "the sink ${audioSinkMock.getId()} was not registered",
+        assertThat "The sink ${audioSinkFake.getId()} was not registered",
                 audioManager.getSink(),
-                is(equalTo(audioSinkMock))
-        assertThat "the sink ${audioSinkMock.getId()} was not added to the set of sinks",
-                audioManager.getSinkIds().contains(audioSinkMock.getId()),
+                is(audioSinkFake)
+        assertThat "The sink ${audioSinkFake.getId()} was not added to the set of sinks",
+                audioManager.getSinkIds().contains(audioSinkFake.getId()),
                 is(true)
-        assertThat "the sink ${audioSinkMock.getId()} was not added to the set of sinks",
-                audioManager.getSinks(audioSinkMock.getId()).contains(audioSinkMock.getId()),
+        assertThat "The sink ${audioSinkFake.getId()} was not added to the set of sinks",
+                audioManager.getSinks(audioSinkFake.getId()).contains(audioSinkFake.getId()),
                 is(true)
     }
 
@@ -285,25 +271,28 @@ public class AudioManagerTest extends AudioOSGiTest {
 
         waitForAssert({
             assertThat "The format of the audio sink mock was not as expected",
-                    audioSinkMock.audioFormat,
+                    audioSinkFake.audioFormat,
                     is(nullValue())
         })
 
-        if(playType.equals(PlayType.STREAM)){
-            audioManager.play(audioStream, audioSinkMock.getId())
-        } else if(playType.equals(PlayType.FILE)){
-            File audioFile = ((FileAudioStream)audioStream).file
-            String audioFileName = audioFile.getName()
-            audioManager.playFile(audioFileName, audioSinkMock.getId())
+        switch(playType){
+            case PlayType.STREAM:
+                audioManager.play(audioStream, audioSinkFake.getId())
+                break
+            case PlayType.FILE:
+                File audioFile = ((FileAudioStream)audioStream).file
+                String audioFileName = audioFile.getName()
+                audioManager.playFile(audioFileName, audioSinkFake.getId())
+                break
         }
 
         assertCompatibleFormat()
     }
 
     private PercentType getSinkMockVolume(PercentType initialVolume){
-        audioManager.setVolume(initialVolume, audioSinkMock.getId())
+        audioManager.setVolume(initialVolume, audioSinkFake.getId())
 
-        String sinkMockId = audioSinkMock.getId()
+        String sinkMockId = audioSinkFake.getId()
         PercentType sinkMockVolume = audioManager.getVolume(sinkMockId)
 
         return sinkMockVolume
@@ -316,14 +305,20 @@ public class AudioManagerTest extends AudioOSGiTest {
     private void assertAddedParameterOption(String param){
         String id
         String label
-        if(param.equals(AudioManagerImpl.CONFIG_DEFAULT_SINK)){
-            registerSink()
-            id = audioSinkMock.getId()
-            label = audioSinkMock.getLabel()
-        } else if(param.equals(AudioManagerImpl.CONFIG_DEFAULT_SOURCE)){
-            registerSource()
-            id = audioSourceMock.getId()
-            label = audioSourceMock.getLabel()
+
+        switch(param){
+            case AudioManagerImpl.CONFIG_DEFAULT_SINK:
+                registerSink()
+                id = audioSinkFake.getId()
+                label = audioSinkFake.getLabel()
+                break
+            case AudioManagerImpl.CONFIG_DEFAULT_SOURCE:
+                registerSource()
+                id = audioSourceFake.getId()
+                label = audioSourceFake.getLabel()
+                break
+            default:
+                fail("The parameter must be either default sink or default source")
         }
 
         Collection<ParameterOption> parameterOptions = audioManager.getParameterOptions(URI.create(AudioManagerImpl.CONFIG_URI), param, Locale.US)
@@ -351,16 +346,30 @@ public class AudioManagerTest extends AudioOSGiTest {
         }
         String url = generateURL(AUDIO_SERVLET_PROTOCOL, AUDIO_SERVLET_HOSTNAME, AUDIO_SERVLET_PORT, path)
 
-        audioManager.stream(url, audioSinkMock.getId())
+        audioManager.stream(url, audioSinkFake.getId())
 
-        if(audioManager.getSink().equals(audioSinkMock)){
+        if(audioManager.getSink().equals(audioSinkFake)){
             assertThat "The streamed url was not as expected",
-                    audioSinkMock.audioStream.getURL(),
-                    is(equalTo(url))
+                    audioSinkFake.audioStream.getURL(),
+                    is(url)
         } else {
-            assertThat "The sink ${audioSinkMock.getId()} received an unexpected stream",
-                    audioSinkMock.audioStream,
+            assertThat "The sink ${audioSinkFake.getId()} received an unexpected stream",
+                    audioSinkFake.audioStream,
                     is(nullValue())
+        }
+    }
+
+    private enum PlayType{
+        STREAM("stream"), FILE("file")
+
+        private String playType
+
+        public PlayType(String playType){
+            this.playType = playType
+        }
+
+        public String getPlayType(){
+            return playType
         }
     }
 }

@@ -90,6 +90,9 @@ public class URLAudioStream extends org.eclipse.smarthome.core.audio.AudioStream
                 os.write(req.getBytes());
                 is = shoutCastSocket.getInputStream();
             } else {
+                // getInputStream() method is more error-proof than openStream(),
+                // because openStream() does openConnection().getInputStream(), 
+                // which opens a new connection and does not reuse the old one.
                 is = connection.getInputStream();
             }
             return is;

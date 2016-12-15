@@ -79,12 +79,12 @@ public class ConfigUtil {
      * @param configuration the configuration to be normalized (can be null)
      * @param configDescription the configuration description (must not be null)
      * @return the normalized configuration or null if given configuration was null
-     * @throws NullPointerException if given config description is null
+     * @throws IllegalArgumentExcetpion if given config description is null
      */
     public static Map<String, Object> normalizeTypes(Map<String, Object> configuration,
             ConfigDescription configDescription) {
         if (configDescription == null) {
-            throw new NullPointerException("Config description must not be null.");
+            throw new IllegalArgumentException("Config description must not be null.");
         }
 
         if (configuration == null) {

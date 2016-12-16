@@ -8,57 +8,47 @@
 package org.eclipse.smarthome.tools.analysis.checkstyle;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.text.ParseException;
-import java.util.Arrays;
 import java.util.List;
-import java.util.Set;
-
-import org.apache.ivy.osgi.core.ExportPackage;
-import org.apache.ivy.osgi.core.ManifestParser;
+import java.util.jar.Attributes;
+import java.util.jar.Manifest;
 
 import com.puppycrawl.tools.checkstyle.api.AbstractFileSetCheck;
 import com.puppycrawl.tools.checkstyle.api.CheckstyleException;
-import com.puppycrawl.tools.checkstyle.api.LocalizedMessage;
 
 /**
- * Checks if a manifest file exports internal packages.
+ * Checks if the MANIFEST.MF file contains any "Require-Bundle" entries.
  *
- * @author Svilen Valkanov
+ * @author Petar Valchev
  *
  */
-public class ExportInternalPackageCheck extends AbstractFileSetCheck {
-    private static int numberOfFiles = 0;
+public class RequireBundleCheck extends AbstractFileSetCheck {
     /**
      * A key is pointing to the warning message text in "messages.properties"
      * file.
      */
-    public static final String MSG_KEY = "exported.internal.package";
+    public static final String MSG_KEY = "require.bundle.used";
     public static final String MANIFEST_EXTENSTION = "MF";
+    public static final String REQUIRE_BUNDLE_HEADER = "Require-Bundle";
 
-    public ExportInternalPackageCheck() {
+    public RequireBundleCheck() {
         setFileExtensions(MANIFEST_EXTENSTION);
     }
 
     @Override
-    public void beginProcessing(String charset) {
-        System.out.println("charset: " + charset);
-        setFileExtensions(MANIFEST_EXTENSTION);
-    }
-    
-    @Override
-    protected void processFiltered(File file, List<String> lines) throws CheckstyleException {
+    protected void processFiltered(File file, List<String> lines) {
         try {
-            Set<ExportPackage> exports = ManifestParser.parseManifest(file).getExports();
-            for(ExportPackage export : exports){
-                if(export.toString().contains(".internal")){
-                    log(findLineNumber(lines, export.toString()), MSG_KEY, new Integer(0));
-                }
+            Manifest manifest = new Manifest(new FileInputStream(file));
+            Attributes attributes = manifest.getMainAttributes();
+            String requreBundleHeader = attributes.getValue(REQUIRE_BUNDLE_HEADER);
+            if(requreBundleHeader != null){
+                log(findLineNumber(lines, requreBundleHeader), MSG_KEY, new Integer(0));
             }
-            
-        } catch (IOException e) {
+        } catch (FileNotFoundException e) {
             e.printStackTrace();
-        } catch (ParseException e) {
+        } catch (IOException e) {
             e.printStackTrace();
         }
     }

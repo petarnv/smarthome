@@ -10,59 +10,48 @@ package org.eclipse.smarthome.tools.analysis.checkstyle;
 import java.io.File;
 import java.io.IOException;
 import java.text.ParseException;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 
-import org.apache.ivy.osgi.core.ExportPackage;
+import org.apache.ivy.osgi.core.BundleRequirement;
 import org.apache.ivy.osgi.core.ManifestParser;
 
 import com.puppycrawl.tools.checkstyle.api.AbstractFileSetCheck;
-import com.puppycrawl.tools.checkstyle.api.CheckstyleException;
-import com.puppycrawl.tools.checkstyle.api.LocalizedMessage;
 
 /**
- * Checks if a manifest file exports internal packages.
+ * Checks if the MANIFEST.MF file has any version constraints on package imports.
  *
- * @author Svilen Valkanov
+ * @author Petar Valchev
  *
  */
-public class ExportInternalPackageCheck extends AbstractFileSetCheck {
-    private static int numberOfFiles = 0;
+public class VersionCheck extends AbstractFileSetCheck {
     /**
      * A key is pointing to the warning message text in "messages.properties"
      * file.
      */
-    public static final String MSG_KEY = "exported.internal.package";
+    public static final String MSG_KEY = "version.used";
     public static final String MANIFEST_EXTENSTION = "MF";
-
-    public ExportInternalPackageCheck() {
-        setFileExtensions(MANIFEST_EXTENSTION);
-    }
-
-    @Override
-    public void beginProcessing(String charset) {
-        System.out.println("charset: " + charset);
+    
+    public VersionCheck() {
         setFileExtensions(MANIFEST_EXTENSTION);
     }
     
     @Override
-    protected void processFiltered(File file, List<String> lines) throws CheckstyleException {
+    protected void processFiltered(File file, List<String> lines) {
         try {
-            Set<ExportPackage> exports = ManifestParser.parseManifest(file).getExports();
-            for(ExportPackage export : exports){
-                if(export.toString().contains(".internal")){
-                    log(findLineNumber(lines, export.toString()), MSG_KEY, new Integer(0));
+            Set<BundleRequirement> imports = ManifestParser.parseManifest(file).getRequirements();
+            for(BundleRequirement requirement : imports){
+                if(requirement.getVersion() != null){
+                    log(findLineNumber(lines, requirement.getName()), MSG_KEY, new Integer(0));
                 }
             }
-            
         } catch (IOException e) {
             e.printStackTrace();
         } catch (ParseException e) {
             e.printStackTrace();
         }
     }
-
+    
     private int findLineNumber(List<String> lines, String text) {
         int number = 0;
         for (String line : lines) {

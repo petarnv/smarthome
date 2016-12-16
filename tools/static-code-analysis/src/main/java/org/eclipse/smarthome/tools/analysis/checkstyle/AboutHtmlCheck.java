@@ -15,7 +15,6 @@ import java.util.Arrays;
 import java.util.List;
 
 import com.puppycrawl.tools.checkstyle.api.AbstractFileSetCheck;
-import com.puppycrawl.tools.checkstyle.api.CheckstyleException;
 import com.puppycrawl.tools.checkstyle.api.MessageDispatcher;
 
 /**

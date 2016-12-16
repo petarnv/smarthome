@@ -34,7 +34,7 @@ public class ExportInternalPackageCheckTest extends BaseCheckTestSupport {
     @Test
     public void testManifestFileThatExportsInternalPackage() throws Exception {
         DefaultConfiguration config = createCheckConfig(ExportInternalPackageCheck.class);
-        String testFileName = "MANIFEST.MF";
+        String testFileName = "EXPORTED_INTERNAL_PACKAGE_MANIFEST.MF";
         int lineNumber = 12;
 
         String[] expectedMessages = { lineNumber + ": " + ExportInternalPackageCheck.MSG_KEY };

@@ -16,7 +16,6 @@ import java.util.jar.Attributes;
 import java.util.jar.Manifest;
 
 import com.puppycrawl.tools.checkstyle.api.AbstractFileSetCheck;
-import com.puppycrawl.tools.checkstyle.api.CheckstyleException;
 
 /**
  * Checks if the MANIFEST.MF file contains any "Require-Bundle" entries.
@@ -40,6 +39,9 @@ public class RequireBundleCheck extends AbstractFileSetCheck {
     @Override
     protected void processFiltered(File file, List<String> lines) {
         try {
+            // We use Manifest class here instead of ManifestParser,
+            // because it is easier to get the content of the headers
+            // in the MANIFEST.MF
             Manifest manifest = new Manifest(new FileInputStream(file));
             Attributes attributes = manifest.getMainAttributes();
             String requreBundleHeader = attributes.getValue(REQUIRE_BUNDLE_HEADER);

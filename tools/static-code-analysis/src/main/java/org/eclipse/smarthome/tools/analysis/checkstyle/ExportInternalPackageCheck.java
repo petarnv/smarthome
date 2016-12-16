@@ -10,7 +10,6 @@ package org.eclipse.smarthome.tools.analysis.checkstyle;
 import java.io.File;
 import java.io.IOException;
 import java.text.ParseException;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 
@@ -19,7 +18,6 @@ import org.apache.ivy.osgi.core.ManifestParser;
 
 import com.puppycrawl.tools.checkstyle.api.AbstractFileSetCheck;
 import com.puppycrawl.tools.checkstyle.api.CheckstyleException;
-import com.puppycrawl.tools.checkstyle.api.LocalizedMessage;
 
 /**
  * Checks if a manifest file exports internal packages.
@@ -28,7 +26,6 @@ import com.puppycrawl.tools.checkstyle.api.LocalizedMessage;
  *
  */
 public class ExportInternalPackageCheck extends AbstractFileSetCheck {
-    private static int numberOfFiles = 0;
     /**
      * A key is pointing to the warning message text in "messages.properties"
      * file.

@@ -39,7 +39,6 @@ public class ExportInternalPackageCheck extends AbstractFileSetCheck {
 
     @Override
     public void beginProcessing(String charset) {
-        System.out.println("charset: " + charset);
         setFileExtensions(MANIFEST_EXTENSTION);
     }
     

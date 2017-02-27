@@ -27,7 +27,7 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtils;
 public class MavenPomderivedInClasspathCheckTest extends AbstractStaticCheckTest {
 
     private static final String FILE_NAME = File.separator + "." + MavenPomderivedInClasspathCheck.CLASSPATH_NAME;
-    private static final String TEST_DIRECTORY = "mavenPomDerivedInClasspathCheck" + File.separator;
+    private static final String TEST_DIRECTORY = "mavenPomDerivedInClasspathCheckTest" + File.separator;
 
     static DefaultConfiguration config;
 

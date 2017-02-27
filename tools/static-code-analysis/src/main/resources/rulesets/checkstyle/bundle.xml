@@ -50,6 +50,11 @@
     <property name="severity" value="warning" />
   </module>
 
+  <module name="org.eclipse.smarthome.tools.analysis.checkstyle.ServiceComponentManifestCheck">
+    <property name="severity" value="warning" />
+    <property name="excludedSubfolders" value="blueprint, app"/>
+  </module>
+
   <module name="TreeWalker">
     <!-- See http://checkstyle.sourceforge.net/config_coding.html#IllegalThrows -->
     <module name="IllegalThrows">

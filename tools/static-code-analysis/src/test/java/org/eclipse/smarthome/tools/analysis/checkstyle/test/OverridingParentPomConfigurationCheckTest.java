@@ -27,7 +27,7 @@ import com.puppycrawl.tools.checkstyle.utils.CommonUtils;
 public class OverridingParentPomConfigurationCheckTest extends AbstractStaticCheckTest {
 
     private static final String FILE_NAME = File.separator + OverridingParentPomConfigurationCheck.FILE_NAME;
-    private static final String TEST_DIRECTORY = "overridingParentPomConfigurationCheck" + File.separator;
+    private static final String TEST_DIRECTORY = "overridingParentPomConfigurationCheckTest" + File.separator;
 
     static DefaultConfiguration config;
 

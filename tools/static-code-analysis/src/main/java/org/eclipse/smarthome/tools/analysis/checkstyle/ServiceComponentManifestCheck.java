@@ -15,8 +15,11 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.jar.Attributes;
 import java.util.jar.Manifest;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.eclipse.smarthome.tools.analysis.checkstyle.api.AbstractStaticCheck;
@@ -54,14 +57,12 @@ public class ServiceComponentManifestCheck extends AbstractStaticCheck {
             + OSGI_INF_DIRECTORY_NAME + " folder.";
     public static final String REPEATED_SERVICE_MESSAGE = "If you are using OSGI-INF/*.xml, do not include any of the services explicitly. "
             + "Otherwise they will be included twice.";
+
+    private List<String> regexServiceComponents = new ArrayList<>();
+    private List<String> explicitlyDeclaredServiceComponents = new ArrayList<>();
+    private List<String> componentXmlFiles = new ArrayList<>();
     
     private String manifestPath;
-
-    private List<String> componentXmlFiles = new ArrayList<>();
-    private List<String> manifestServiceComponents = new ArrayList<>();
-    
-    private List<String> manifestFileContent;
-    private String serviceComponentHeaderValue;
     
     public String[] excludedSubfolders;
 
@@ -71,8 +72,8 @@ public class ServiceComponentManifestCheck extends AbstractStaticCheck {
     }
 
     public ServiceComponentManifestCheck() {
-        logger.info("Executing the ServiceComponentManifestCheck: "
-                + "Check if all the declarative services are included in the " + MANIFEST_FILE_NAME);
+        /*logger.info("Executing the ServiceComponentManifestCheck: "
+                + "Check if all the declarative services are included in the " + MANIFEST_FILE_NAME);*/
         setFileExtensions(MANIFEST_EXTENSTION, XML_EXTENSION);
     }
 
@@ -80,6 +81,7 @@ public class ServiceComponentManifestCheck extends AbstractStaticCheck {
     protected void processFiltered(File file, List<String> lines) throws CheckstyleException {
         String fileName = file.getName();
         String filePath = file.getPath();
+        manifestPath = filePath;
         if (filePath.contains(OSGI_INF_DIRECTORY_NAME)) {
             if (!isFileInExcludedDirectory(file)) {
                 componentXmlFiles.add(fileName);
@@ -87,102 +89,57 @@ public class ServiceComponentManifestCheck extends AbstractStaticCheck {
         }
 
         if (fileName.equals(MANIFEST_FILE_NAME)) {
-            manifestFileContent = lines;
-            manifestPath = file.getPath();
             try {
                 Manifest manifest = new Manifest(new FileInputStream(file));
                 Attributes attributes = manifest.getMainAttributes();
-                serviceComponentHeaderValue = attributes.getValue(SERVICE_COMPONENT_HEADER);
+                String serviceComponentHeaderValue = attributes.getValue(SERVICE_COMPONENT_HEADER);
+                
+                int serviceComponentHeaderLineNumber = findLineNumber(lines, SERVICE_COMPONENT_HEADER, 0);
+                if(serviceComponentHeaderValue != null){
+                    List<String> serviceComponentsList = Arrays.asList(serviceComponentHeaderValue.trim().split(","));
+                    for(String serviceComponent : serviceComponentsList){
+                        File serviceComponentFile = new File(serviceComponent);
+                        String serviceComponentParentDirectoryName = serviceComponentFile.getParentFile().getName();
+                        
+                        if(!serviceComponentParentDirectoryName.equals(OSGI_INF_DIRECTORY_NAME)){
+                            String wrongDirectoryMessage = String.format(WRONG_DIRECTORY_MESSAGE, serviceComponentParentDirectoryName);
+                            logMessage(serviceComponentHeaderLineNumber, wrongDirectoryMessage);
+                        }
+                        
+                        String serviceComponentName = serviceComponentFile.getName();
+                        if(!serviceComponentName.endsWith(XML_EXTENSION)){
+                            logMessage(serviceComponentHeaderLineNumber, WRONG_EXTENSION_MESSAGE);
+                        } else if(serviceComponentName.contains("*")){
+                            regexServiceComponents.add(serviceComponentName);
+                        } else {
+                            explicitlyDeclaredServiceComponents.add(serviceComponentName);
+                        }
+                    }
+                }
             } catch (IOException e) {
                 logger.error("Problem occurred while parsing the file " + filePath, e);
             }
-            verifyServiceComponentHeader();
         }
     }
     
     @Override
     public void finishProcessing() {
-        boolean presentManifestServiceComponent = manifestServiceComponents.size() > 0;
+        //System.out.println("regexServiceComponents: " + regexServiceComponents);
+        //System.out.println("explicitlyDeclaredServiceComponents: " + explicitlyDeclaredServiceComponents);
+        //System.out.println("componentXmlFiles: " + componentXmlFiles);
         
-        boolean wildcardUsedInManifest = serviceComponentHeaderValue != null && serviceComponentHeaderValue.contains("*") ;
-        // we are only interested in the services that are explicitly
-        // declared in the Service-Component header of the MANIFEST.MF
-        boolean presentComponentXmlFiles = componentXmlFiles.size() > 0 && !wildcardUsedInManifest;
-        
-        boolean validServiceComponentsConfiguration = presentManifestServiceComponent || presentComponentXmlFiles;
-        if (validServiceComponentsConfiguration) {
-            boolean allServicesAreIcluded = CollectionUtils.isEqualCollection(manifestServiceComponents,
-                    componentXmlFiles);
-            if (allServicesAreIcluded) {
-                // If all the services in the MANIFEST.MF are included
-                // separately
-                logMessage(findLineNumber(manifestFileContent, SERVICE_COMPONENT_HEADER, 0), WARNING_MESSAGE);
-            } else if (manifestServiceComponents.size() > componentXmlFiles.size()) {
-                // If there is a service in the MANIFEST.MF that does not exists
-                // in the OSGI-INF folder
-                manifestServiceComponents.removeAll(componentXmlFiles);
-                logMissingServiceDeclaration(manifestServiceComponents, NOT_EXISTING_SERVICE_MESSAGE);
-            } else {
-                // If there is a service in the OSGI-INF that is not included in
-                // the MANIFEST.MF
-                if(!wildcardUsedInManifest){
-                    componentXmlFiles.removeAll(manifestServiceComponents);
-                    logMissingServiceDeclaration(componentXmlFiles, NOT_INCLUDED_SERVICE_MESSAGE);
-                }
-            }
-        }
-    }
-    
-    private void verifyServiceComponentHeader() {
-        List<File> serviceComponents = parseServiceComponentHeader();
-        if (!serviceComponents.isEmpty()) {
-            int serviceComponentHeaderLineNumber = findLineNumber(manifestFileContent, SERVICE_COMPONENT_HEADER, 0);
+        for(String pattern : regexServiceComponents){
+            String patternWithoutExtension = StringUtils.substringBefore(pattern, XML_EXTENSION);
             
-            for (File serviceComponent : serviceComponents) {
-                boolean correctServiceComponentNameUsed = serviceComponent.getName().equals("*" + XML_EXTENSION);
-                boolean correctServiceComponentDirectoryUsed = serviceComponent.getParentFile().getName().equals(OSGI_INF_DIRECTORY_NAME);
-                boolean repeatedService = serviceComponents.size() > 1;
-                boolean serviceWithXmlExtension = serviceComponent.getName().endsWith(XML_EXTENSION);
-                boolean wildcardUsed = serviceComponent.getName().contains("*");
-
-                if (correctServiceComponentNameUsed && correctServiceComponentDirectoryUsed) {
-                    // If the component descriptor entry is OSGI-INF/*.xml
-                    if (repeatedService) {
-                        // If there is any explicit service declaration in addition to OSGI-INF/*.xml
-                        logMessage(serviceComponentHeaderLineNumber, REPEATED_SERVICE_MESSAGE);
-                    }
-                } else {
-                    if (!correctServiceComponentDirectoryUsed) {
-                        // If the parent directory of the service component is not OSGI-INF/
-                        String wrongDirectoryMessage = String.format(WRONG_DIRECTORY_MESSAGE, serviceComponent.getParentFile().getName());
-                        logMessage(serviceComponentHeaderLineNumber, wrongDirectoryMessage);
-                    }
-                    if (!serviceWithXmlExtension) {
-                        // If the service component is with extension other than .xml
-                        logMessage(serviceComponentHeaderLineNumber, WRONG_EXTENSION_MESSAGE);
-                    }
-                    if (!wildcardUsed && serviceWithXmlExtension) {
-                        // If the xml service component does not use wildcard in its name
-                        manifestServiceComponents.add(serviceComponent.getName());
-                    }
-                    if (wildcardUsed && serviceWithXmlExtension && !correctServiceComponentNameUsed) {
-                        // If a wildcard other than *.xml is used (e.g. service*.xml)
-                        logMessage(serviceComponentHeaderLineNumber, WARNING_MESSAGE);
-                    }
+            if(!patternWithoutExtension.equals("*")){
+                System.out.println("patternWithoutExtension: " + patternWithoutExtension);
+                Pattern p = Pattern.compile(patternWithoutExtension);
+                Matcher m = p.matcher("serviceTestFile1.xml");
+                while(m.find()) {
+                    System.out.println("MATCH!");
                 }
             }
         }
-    }
-
-    private List<File> parseServiceComponentHeader(){
-        List<File> serviceComponentFiles = new ArrayList<>();
-        if(serviceComponentHeaderValue != null){
-            List<String> serviceComponentsList = Arrays.asList(serviceComponentHeaderValue.trim().split(","));
-            for(String serviceComponent : serviceComponentsList){
-                serviceComponentFiles.add(new File(serviceComponent));
-            }
-        }
-        return serviceComponentFiles;
     }
     
     private boolean isFileInExcludedDirectory(File serviceFile) {
@@ -196,22 +153,7 @@ public class ServiceComponentManifestCheck extends AbstractStaticCheck {
         }
         return false;
     }
-
-    private void logMissingServiceDeclaration(List<String> missingServices, String message) {
-        for (String service : missingServices) {
-            int lineNumber = 0;
-            if (serviceComponentHeaderValue != null) {
-                lineNumber = findLineNumber(manifestFileContent, service, 0);
-                if (lineNumber == -1) {
-                    // If the service is not included in the MANIFEST.MF, take the
-                    // line number of the Service-Component header
-                    lineNumber = findLineNumber(manifestFileContent, SERVICE_COMPONENT_HEADER, 0);
-                }
-            }
-            logMessage(lineNumber, String.format(message, service));
-        }
-    }
-
+    
     private void logMessage(int line, String message) {
         MessageDispatcher dispatcher = getMessageDispatcher();
         dispatcher.fireFileStarted(manifestPath);

@@ -43,8 +43,8 @@ public class ServiceComponentManifestCheckTest extends AbstractStaticCheckTest {
     public void testWrongServicesDirectoryInManifest() throws Exception {
         int lineNumber = 11;
         String[] expectedMessages = generateExpectedMessages(
-                lineNumber, String.format(ServiceComponentManifestCheck.WRONG_DIRECTORY_MESSAGE, "TEST"), 
-                lineNumber, String.format(ServiceComponentManifestCheck.WRONG_DIRECTORY_MESSAGE, "OSG-INF"));
+                lineNumber, String.format(ServiceComponentManifestCheck.WRONG_DIRECTORY_MESSAGE, "TEST")/*, 
+                lineNumber, String.format(ServiceComponentManifestCheck.WRONG_DIRECTORY_MESSAGE, "OSG-INF")*/);
 
         verifyServiceComponentHeader("manifest_wrong_services_directory", expectedMessages);
     }
@@ -73,7 +73,7 @@ public class ServiceComponentManifestCheckTest extends AbstractStaticCheckTest {
     public void testManifestIncludedServices() throws Exception {
         int lineNumber = 11;
         String[] expectedMessages = generateExpectedMessages(
-                lineNumber, String.format(ServiceComponentManifestCheck.NOT_INCLUDED_SERVICE_MESSAGE, "serviceFromSubFolder.xml"),
+                /*lineNumber, String.format(ServiceComponentManifestCheck.NOT_INCLUDED_SERVICE_MESSAGE, "serviceFromSubFolder.xml"),*/
                 lineNumber, String.format(ServiceComponentManifestCheck.NOT_INCLUDED_SERVICE_MESSAGE, "serviceTestFileThree.xml"));
         
         verifyServiceComponentHeader("manifest_not_included_services", expectedMessages);
@@ -88,11 +88,15 @@ public class ServiceComponentManifestCheckTest extends AbstractStaticCheckTest {
         verifyServiceComponentHeader("manifest_separately_included_services", expectedMessages);
     }
 
+    // TODO - separate tests for this case
     @Test
     public void testManifestRegexIncludedServices() throws Exception {
         int lineNumber = 11;
         String[] expectedMessages = generateExpectedMessages(
-                lineNumber, ServiceComponentManifestCheck.WARNING_MESSAGE);
+                /*lineNumber, String.format(ServiceComponentManifestCheck.NOT_EXISTING_SERVICE_MESSAGE, "service.xml"),*/
+                lineNumber, ServiceComponentManifestCheck.REGEX_INCLUDED_SERVICE,
+                lineNumber, ServiceComponentManifestCheck.WARNING_MESSAGE/*,
+                lineNumber, ServiceComponentManifestCheck.REGEX_INCLUDED_SERVICE*/);
         
         verifyServiceComponentHeader("manifest_regex_included_services", expectedMessages);
     }
@@ -108,8 +112,9 @@ public class ServiceComponentManifestCheckTest extends AbstractStaticCheckTest {
 
     @Test
     public void testManifestNotExistentServices() throws Exception {
-        int lineNumber = 14;
+        int lineNumber = 11;
         String[] expectedMessages = generateExpectedMessages(
+                lineNumber, ServiceComponentManifestCheck.WARNING_MESSAGE,
                 lineNumber, String.format(ServiceComponentManifestCheck.NOT_EXISTING_SERVICE_MESSAGE, "serviceTestFileFour.xml"));
         
         verifyServiceComponentHeader("manifest_not_existent_services", expectedMessages);
@@ -118,7 +123,7 @@ public class ServiceComponentManifestCheckTest extends AbstractStaticCheckTest {
     @Test
     public void testNotExistentOsgiFolder() throws Exception {
         int lineNumberOfFirstMessage = 11;
-        int lineNumberOFSecondMessage = 12;
+        int lineNumberOFSecondMessage = 11;
         String[] expectedMessages = generateExpectedMessages(
                 lineNumberOfFirstMessage, String.format(ServiceComponentManifestCheck.NOT_EXISTING_SERVICE_MESSAGE, "serviceTestFileOne.xml"),
                 lineNumberOFSecondMessage, String.format(ServiceComponentManifestCheck.NOT_EXISTING_SERVICE_MESSAGE, "serviceTestFileTwo.xml"));
@@ -171,7 +176,7 @@ public class ServiceComponentManifestCheckTest extends AbstractStaticCheckTest {
         File testDirectory = new File(testDirectoryPath);
         String testFilePath = testDirectory.getPath() + File.separator + MANIFEST_RELATIVE_PATH;
         File[] testFiles = listFilesForDirectory(testDirectory, new ArrayList<File>());
-        
+
         verify(createChecker(config), testFiles, testFilePath, expectedMessages);
     }
 }

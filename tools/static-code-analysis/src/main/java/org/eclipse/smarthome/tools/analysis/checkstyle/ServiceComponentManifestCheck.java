@@ -57,10 +57,17 @@ public class ServiceComponentManifestCheck extends AbstractStaticCheck {
             + OSGI_INF_DIRECTORY_NAME + " folder.";
     public static final String REPEATED_SERVICE_MESSAGE = "If you are using OSGI-INF/*.xml, do not include any of the services explicitly. "
             + "Otherwise they will be included twice.";
+    // TODO - more meaningful message
+    public static final String REGEX_INCLUDED_SERVICE = "regex included service - %s";
 
-    private List<String> regexServiceComponents = new ArrayList<>();
-    private List<String> explicitlyDeclaredServiceComponents = new ArrayList<>();
+    //private List<String> regexServiceComponents = new ArrayList<>();
+    private List<String> manifestServiceComponents = new ArrayList<>();
     private List<String> componentXmlFiles = new ArrayList<>();
+    
+    private int serviceComponentHeaderLineNumber;
+    
+    private boolean loggedWarningMessage = false;
+    private boolean regexIncludedWarningMessage = false;
     
     private String manifestPath;
     
@@ -81,7 +88,6 @@ public class ServiceComponentManifestCheck extends AbstractStaticCheck {
     protected void processFiltered(File file, List<String> lines) throws CheckstyleException {
         String fileName = file.getName();
         String filePath = file.getPath();
-        manifestPath = filePath;
         if (filePath.contains(OSGI_INF_DIRECTORY_NAME)) {
             if (!isFileInExcludedDirectory(file)) {
                 componentXmlFiles.add(fileName);
@@ -89,12 +95,13 @@ public class ServiceComponentManifestCheck extends AbstractStaticCheck {
         }
 
         if (fileName.equals(MANIFEST_FILE_NAME)) {
+            manifestPath = filePath;
             try {
                 Manifest manifest = new Manifest(new FileInputStream(file));
                 Attributes attributes = manifest.getMainAttributes();
                 String serviceComponentHeaderValue = attributes.getValue(SERVICE_COMPONENT_HEADER);
                 
-                int serviceComponentHeaderLineNumber = findLineNumber(lines, SERVICE_COMPONENT_HEADER, 0);
+                serviceComponentHeaderLineNumber = findLineNumber(lines, SERVICE_COMPONENT_HEADER, 0);
                 if(serviceComponentHeaderValue != null){
                     List<String> serviceComponentsList = Arrays.asList(serviceComponentHeaderValue.trim().split(","));
                     for(String serviceComponent : serviceComponentsList){
@@ -103,16 +110,18 @@ public class ServiceComponentManifestCheck extends AbstractStaticCheck {
                         
                         if(!serviceComponentParentDirectoryName.equals(OSGI_INF_DIRECTORY_NAME)){
                             String wrongDirectoryMessage = String.format(WRONG_DIRECTORY_MESSAGE, serviceComponentParentDirectoryName);
+                            //System.out.println("---1---");
                             logMessage(serviceComponentHeaderLineNumber, wrongDirectoryMessage);
-                        }
+                        } 
                         
                         String serviceComponentName = serviceComponentFile.getName();
                         if(!serviceComponentName.endsWith(XML_EXTENSION)){
+                            //System.out.println("---2---");
                             logMessage(serviceComponentHeaderLineNumber, WRONG_EXTENSION_MESSAGE);
-                        } else if(serviceComponentName.contains("*")){
-                            regexServiceComponents.add(serviceComponentName);
+                        /*} else if(serviceComponentName.contains("*")){
+                            regexServiceComponents.add(serviceComponentName);*/
                         } else {
-                            explicitlyDeclaredServiceComponents.add(serviceComponentName);
+                            manifestServiceComponents.add(serviceComponentName);
                         }
                     }
                 }
@@ -124,22 +133,59 @@ public class ServiceComponentManifestCheck extends AbstractStaticCheck {
     
     @Override
     public void finishProcessing() {
-        //System.out.println("regexServiceComponents: " + regexServiceComponents);
-        //System.out.println("explicitlyDeclaredServiceComponents: " + explicitlyDeclaredServiceComponents);
-        //System.out.println("componentXmlFiles: " + componentXmlFiles);
         
-        for(String pattern : regexServiceComponents){
-            String patternWithoutExtension = StringUtils.substringBefore(pattern, XML_EXTENSION);
-            
-            if(!patternWithoutExtension.equals("*")){
-                System.out.println("patternWithoutExtension: " + patternWithoutExtension);
-                Pattern p = Pattern.compile(patternWithoutExtension);
-                Matcher m = p.matcher("serviceTestFile1.xml");
-                while(m.find()) {
-                    System.out.println("MATCH!");
+        for(String serviceComponent : manifestServiceComponents){
+            String serviceComponentName = StringUtils.substringBefore(serviceComponent, XML_EXTENSION);
+            if(serviceComponentName.contains("*")){
+                if(serviceComponentName.equals("*")){
+                    if(manifestServiceComponents.size() > 1){
+                        //System.out.println("---3---");
+                        logMessage(serviceComponentHeaderLineNumber, REPEATED_SERVICE_MESSAGE);
+                    }
+                } else {
+                    // regex service component
+                    Pattern p = Pattern.compile(serviceComponentName);
+                    for(String componentXml : componentXmlFiles){
+                        //String componentXmlFileName = StringUtils.substringBefore(componentXml, XML_EXTENSION);
+                        Matcher m = p.matcher(componentXml);
+                        if(m.find()){
+                            if(!regexIncludedWarningMessage){
+                                //System.out.println("---4---");
+                                logMessage(serviceComponentHeaderLineNumber, REGEX_INCLUDED_SERVICE);
+                                regexIncludedWarningMessage = true;
+                            }
+                        } else {
+                            // TODO - decide what will I do in this case, the commented message is not an option
+                            //logMessage(serviceComponentHeaderLineNumber, String.format(NOT_EXISTING_SERVICE_MESSAGE,componentXml));
+                        }
+                    }
+                }
+            } else {
+                // explicitly included services
+                if(componentXmlFiles.contains(serviceComponent)){
+                    /*System.out.println("componentXmlFiles: " + componentXmlFiles);
+                    System.out.println("serviceComponent: " + serviceComponent);*/
+                    
+                    if(!loggedWarningMessage){
+                        //System.out.println("---6---");
+                        logMessage(serviceComponentHeaderLineNumber, WARNING_MESSAGE);
+                        loggedWarningMessage = true;
+                    }
+                } else {
+                    //System.out.println("---7---");
+                    logMessage(serviceComponentHeaderLineNumber, String.format(NOT_EXISTING_SERVICE_MESSAGE,serviceComponent));
                 }
             }
         }
+        
+        if(!componentXmlFiles.isEmpty()){
+            for(String componentXml : componentXmlFiles){
+                
+            }
+        } else {
+            
+        }
+        
     }
     
     private boolean isFileInExcludedDirectory(File serviceFile) {

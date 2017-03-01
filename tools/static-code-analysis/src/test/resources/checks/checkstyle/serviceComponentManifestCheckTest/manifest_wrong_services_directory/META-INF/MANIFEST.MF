@@ -8,8 +8,7 @@ Bundle-RequiredExecutionEnvironment: JavaSE-1.7
 Bundle-ClassPath: .
 Import-Package: com.google.common.collect,
  javax.xml.bind
-Service-Component: TEST/*.xml,
- OSGI-INF/*.xml
+Service-Component: TEST/*.xml
 Export-Package: org.eclipse.smarthome.buildtools.internal,
  org.eclipse.smarthome.buildtools.other
 

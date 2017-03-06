@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import org.eclipse.smarthome.tools.analysis.checkstyle.ServiceComponentManifestCheck;
 import org.eclipse.smarthome.tools.analysis.checkstyle.api.AbstractStaticCheckTest;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import com.puppycrawl.tools.checkstyle.DefaultConfiguration;
@@ -58,6 +59,7 @@ public class ServiceComponentManifestCheckTest extends AbstractStaticCheckTest {
         verifyServiceComponentHeader("manifest_wrong_services_extensions", expectedMessages);
     }
 
+    //@Ignore
     @Test
     public void testManifestNoServiceComponent() throws Exception {
         int lineNumber = 0;
@@ -69,12 +71,14 @@ public class ServiceComponentManifestCheckTest extends AbstractStaticCheckTest {
         verifyServiceComponentHeader("manifest_no_service_component", expectedMessages);
     }
 
+    //@Ignore
     @Test
     public void testManifestIncludedServices() throws Exception {
         int lineNumber = 11;
         String[] expectedMessages = generateExpectedMessages(
-                /*lineNumber, String.format(ServiceComponentManifestCheck.NOT_INCLUDED_SERVICE_MESSAGE, "serviceFromSubFolder.xml"),*/
-                lineNumber, String.format(ServiceComponentManifestCheck.NOT_INCLUDED_SERVICE_MESSAGE, "serviceTestFileThree.xml"));
+                lineNumber, String.format(ServiceComponentManifestCheck.NOT_INCLUDED_SERVICE_MESSAGE, "serviceFromSubFolder.xml"),
+                lineNumber, String.format(ServiceComponentManifestCheck.NOT_INCLUDED_SERVICE_MESSAGE, "serviceTestFileThree.xml"),
+                lineNumber, ServiceComponentManifestCheck.WARNING_MESSAGE);
         
         verifyServiceComponentHeader("manifest_not_included_services", expectedMessages);
     }
@@ -94,7 +98,7 @@ public class ServiceComponentManifestCheckTest extends AbstractStaticCheckTest {
         int lineNumber = 11;
         String[] expectedMessages = generateExpectedMessages(
                 /*lineNumber, String.format(ServiceComponentManifestCheck.NOT_EXISTING_SERVICE_MESSAGE, "service.xml"),*/
-                lineNumber, ServiceComponentManifestCheck.REGEX_INCLUDED_SERVICE,
+                lineNumber, String.format(ServiceComponentManifestCheck.REGEX_INCLUDED_SERVICE, "serviceTestFile*.xml"),
                 lineNumber, ServiceComponentManifestCheck.WARNING_MESSAGE/*,
                 lineNumber, ServiceComponentManifestCheck.REGEX_INCLUDED_SERVICE*/);
         
@@ -122,11 +126,11 @@ public class ServiceComponentManifestCheckTest extends AbstractStaticCheckTest {
 
     @Test
     public void testNotExistentOsgiFolder() throws Exception {
-        int lineNumberOfFirstMessage = 11;
-        int lineNumberOFSecondMessage = 11;
+        int lineNumber = 11;
         String[] expectedMessages = generateExpectedMessages(
-                lineNumberOfFirstMessage, String.format(ServiceComponentManifestCheck.NOT_EXISTING_SERVICE_MESSAGE, "serviceTestFileOne.xml"),
-                lineNumberOFSecondMessage, String.format(ServiceComponentManifestCheck.NOT_EXISTING_SERVICE_MESSAGE, "serviceTestFileTwo.xml"));
+                lineNumber, ServiceComponentManifestCheck.WARNING_MESSAGE,
+                lineNumber, String.format(ServiceComponentManifestCheck.NOT_EXISTING_SERVICE_MESSAGE, "serviceTestFileOne.xml"),
+                lineNumber, String.format(ServiceComponentManifestCheck.NOT_EXISTING_SERVICE_MESSAGE, "serviceTestFileTwo.xml"));
 
         verifyServiceComponentHeader("manifest_not_existent_osgi_folder", expectedMessages);
     }
@@ -147,8 +151,8 @@ public class ServiceComponentManifestCheckTest extends AbstractStaticCheckTest {
     public void testTwiceIncludedService() throws Exception {
         int lineNumber = 11;
         String[] expectedMessages = generateExpectedMessages(
-                lineNumber, ServiceComponentManifestCheck.REPEATED_SERVICE_MESSAGE, 
-                lineNumber, ServiceComponentManifestCheck.WARNING_MESSAGE);
+                lineNumber, ServiceComponentManifestCheck.REPEATED_SERVICE_MESSAGE/*, 
+                lineNumber, ServiceComponentManifestCheck.WARNING_MESSAGE*/);
         
         verifyServiceComponentHeader("manifest_twice_included_service", expectedMessages);
     }
